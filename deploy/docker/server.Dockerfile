@@ -1,8 +1,14 @@
 FROM node:22-alpine AS admin-builder
 
+# Same as web.Dockerfile: avoid Corepack pnpm download (TLS flakiness). Optional:
+#   docker build --build-arg NPM_REGISTRY=https://registry.npmmirror.com ...
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG PNPM_VERSION=10.33.0
+ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
+
 WORKDIR /app
 
-RUN corepack enable
+RUN npm install -g pnpm@${PNPM_VERSION}
 
 COPY admin/package.json admin/pnpm-lock.yaml admin/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod=false

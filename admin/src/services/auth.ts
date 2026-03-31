@@ -1,4 +1,4 @@
-import { request } from './http'
+import { ApiError, request } from './http'
 
 export interface UserInfo {
   id: number
@@ -56,10 +56,51 @@ export interface SetupStateResponse {
   needsSetup: boolean
 }
 
-export function getSetupState() {
-  return request<SetupStateResponse>('/auth/setup-state', {
+/** Legacy API: only "at least one user exists" — used when `/auth/setup-state` is missing (older server). */
+export interface InitStateResponse {
+  initialized: boolean
+}
+
+export function getInitState() {
+  return request<InitStateResponse>('/auth/init-state', {
     method: 'GET',
   })
+}
+
+function setupStateFromInitState(init: InitStateResponse): SetupStateResponse {
+  const { initialized } = init
+  return {
+    hasUser: initialized,
+    hasAdmin: initialized,
+    websiteInfoReady: initialized,
+    missingWebsiteInfoKeys: initialized
+      ? []
+      : ['website_name', 'public_url', 'description', 'keywords'],
+    needsSetup: !initialized,
+  }
+}
+
+/**
+ * Prefer `/auth/setup-state` (user + admin + site info). Falls back to `/auth/init-state` on HTTP 404
+ * so older server images still load the admin shell (init wizard may be less precise for site fields).
+ */
+export async function getSetupState(): Promise<SetupStateResponse> {
+  try {
+    return await request<SetupStateResponse>('/auth/setup-state', {
+      method: 'GET',
+    })
+  } catch (e) {
+    const notFound =
+      e instanceof ApiError &&
+      (e.status === 404 || e.bizErr === 'NOT_FOUND' || e.code === 404)
+    if (!notFound) throw e
+    try {
+      const init = await getInitState()
+      return setupStateFromInitState(init)
+    } catch {
+      throw e
+    }
+  }
 }
 
 export interface AccessInfoResponse {

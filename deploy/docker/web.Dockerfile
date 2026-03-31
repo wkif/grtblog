@@ -1,8 +1,15 @@
 FROM node:22-alpine AS builder
 
+# Corepack downloads pnpm via undici → often ECONNRESET behind flaky TLS (e.g. to registry.npmjs.org).
+# Install pnpm with npm instead; set registry when building in CN:
+#   docker build --build-arg NPM_REGISTRY=https://registry.npmmirror.com ...
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG PNPM_VERSION=10.33.0
+ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
+
 WORKDIR /app
 
-RUN corepack enable
+RUN npm install -g pnpm@${PNPM_VERSION}
 
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod=false
@@ -19,6 +26,10 @@ RUN pnpm build
 
 FROM node:22-alpine AS runtime
 
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG PNPM_VERSION=10.33.0
+ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
+
 WORKDIR /app
 
 ARG APP_VERSION=dev
@@ -27,7 +38,7 @@ ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION} \
     BUILD_COMMIT=${BUILD_COMMIT}
 
-RUN corepack enable
+RUN npm install -g pnpm@${PNPM_VERSION}
 
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod
