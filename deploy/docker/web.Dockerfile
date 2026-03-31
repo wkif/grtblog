@@ -46,11 +46,15 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /app/build /app/build
 
 # Install fonts for OG image rendering (resvg on musl cannot load woff2).
-# Noto Serif SC (OTF) – CJK title & subtitle
-# Google Sans Code (TTF) – tags & site name
-ADD https://github.com/notofonts/noto-cjk/releases/download/Serif2.003/14_NotoSerifSC.zip /tmp/NotoSerifSC.zip
-ADD https://github.com/googlefonts/googlesans-code/releases/download/v6.001/GoogleSansCode-v6.001.zip /tmp/GoogleSansCode.zip
-RUN apk add --no-cache fontconfig && \
+# Noto Serif SC (OTF) – CJK title & subtitle; Google Sans Code (TTF) – tags & site name.
+# Avoid `ADD https://...`: BuildKit resolves those URLs as cache keys and often hits EOF on flaky links to GitHub.
+# If still failing, try a mirror prefix, e.g. --build-arg GITHUB_PROXY=https://ghfast.top/
+ARG GITHUB_PROXY=
+RUN apk add --no-cache curl unzip fontconfig ca-certificates && \
+    NOTO_URL="${GITHUB_PROXY}https://github.com/notofonts/noto-cjk/releases/download/Serif2.003/14_NotoSerifSC.zip" && \
+    SANS_URL="${GITHUB_PROXY}https://github.com/googlefonts/googlesans-code/releases/download/v6.001/GoogleSansCode-v6.001.zip" && \
+    curl -fL --connect-timeout 30 --retry 8 --retry-all-errors --retry-delay 3 -o /tmp/NotoSerifSC.zip "$NOTO_URL" && \
+    curl -fL --connect-timeout 30 --retry 8 --retry-all-errors --retry-delay 3 -o /tmp/GoogleSansCode.zip "$SANS_URL" && \
     mkdir -p /usr/share/fonts/og && \
     unzip -q -j /tmp/NotoSerifSC.zip 'SubsetOTF/SC/NotoSerifSC-Regular.otf' 'SubsetOTF/SC/NotoSerifSC-Bold.otf' -d /usr/share/fonts/og/ && \
     unzip -q -j /tmp/GoogleSansCode.zip 'variable/*.ttf' -d /usr/share/fonts/og/ && \
