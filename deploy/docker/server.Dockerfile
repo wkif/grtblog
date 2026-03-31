@@ -37,6 +37,9 @@ WORKDIR /src/server
 
 RUN apk add --no-cache ca-certificates git
 
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
+
 ARG GOOSE_VERSION=v3.26.0
 RUN GOBIN=/out go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
 
