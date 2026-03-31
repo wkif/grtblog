@@ -1,3 +1,4 @@
+ARG GOLANG_IMAGE=
 FROM node:22-alpine AS admin-builder
 
 # Same as web.Dockerfile: avoid Corepack pnpm download (TLS flakiness). Optional:
@@ -30,28 +31,24 @@ ENV VITE_APP_BASE=${VITE_APP_BASE} \
 
 RUN pnpm build
 
-ARG GOLANG_IMAGE=
-FROM ${GOLANG_IMAGE:-golang}:1.23-alpine AS builder
+FROM ${GOLANG_IMAGE:-golang}:1.24.11-alpine AS builder
 
 WORKDIR /src/server
 
 RUN apk add --no-cache ca-certificates git
 
-ARG GOPROXY=https://goproxy.cn,direct
-ENV GOPROXY=${GOPROXY}
-
 ARG GOOSE_VERSION=v3.26.0
-RUN GOBIN=/out go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
+RUN GOPROXY=https://goproxy.cn,direct GOBIN=/out go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
 
 COPY server/go.mod server/go.sum ./
-RUN go mod download
+RUN GOPROXY=https://goproxy.cn,direct go mod download
 
 COPY server/. .
 
 ARG APP_VERSION=dev
 ARG BUILD_COMMIT=unknown
 
-RUN CGO_ENABLED=0 GOOS=linux \
+RUN GOPROXY=https://goproxy.cn,direct CGO_ENABLED=0 GOOS=linux \
   go build -trimpath -ldflags="-s -w \
   -X github.com/grtsinry43/grtblog-v2/server/internal/buildinfo.BuildVersion=${APP_VERSION} \
   -X github.com/grtsinry43/grtblog-v2/server/internal/buildinfo.BuildCommit=${BUILD_COMMIT}" \
