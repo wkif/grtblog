@@ -64,7 +64,8 @@ RUN apk add --no-cache curl unzip fontconfig ca-certificates && \
     rm -f /tmp/NotoSerifSC.zip /tmp/GoogleSansCode.zip
 
 COPY deploy/docker/renderer-entrypoint.sh /usr/local/bin/renderer-entrypoint.sh
-RUN chmod +x /usr/local/bin/renderer-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/renderer-entrypoint.sh \
+  && chmod +x /usr/local/bin/renderer-entrypoint.sh
 
 EXPOSE 3000
 

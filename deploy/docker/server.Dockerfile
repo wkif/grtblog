@@ -69,7 +69,8 @@ COPY --from=builder /src/server/migrations /app/migrations
 COPY --from=admin-builder /app/dist /app/admin
 COPY deploy/docker/server-entrypoint.sh /usr/local/bin/server-entrypoint.sh
 
-RUN mkdir -p /app/storage/html /app/storage/uploads /app/storage/geoip \
+RUN sed -i 's/\r$//' /usr/local/bin/server-entrypoint.sh \
+  && mkdir -p /app/storage/html /app/storage/uploads /app/storage/geoip \
   && chown -R app:app /app \
   && chmod +x /usr/local/bin/server-entrypoint.sh
 

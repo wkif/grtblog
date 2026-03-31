@@ -56,6 +56,7 @@ services:
         APP_VERSION: "${APP_VERSION:-local}"
         BUILD_COMMIT: "${BUILD_COMMIT:-unknown}"
         NODE_IMAGE: "${NODE_IMAGE:-}"
+        GITHUB_PROXY: "${GITHUB_PROXY:-}"
     container_name: grtblog-renderer
     environment:
       NODE_ENV: production
