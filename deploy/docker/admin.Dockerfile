@@ -1,4 +1,5 @@
-FROM node:22-alpine AS builder
+ARG NODE_IMAGE=
+FROM ${NODE_IMAGE:-node}:22-alpine AS builder
 
 WORKDIR /app
 

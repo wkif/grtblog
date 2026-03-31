@@ -13,6 +13,7 @@ services:
         VITE_APP_TITLE: "${VITE_APP_TITLE:-管理后台}"
         VITE_WATERMARK_CONTENT: "${VITE_WATERMARK_CONTENT:-}"
         VITE_API_BASE_URL: "${VITE_API_BASE_URL:-/api/v2}"
+        GOLANG_IMAGE: "${GOLANG_IMAGE:-}"
     container_name: grtblog-server
     environment:
       APP_ENV: production
@@ -54,6 +55,7 @@ services:
       args:
         APP_VERSION: "${APP_VERSION:-local}"
         BUILD_COMMIT: "${BUILD_COMMIT:-unknown}"
+        NODE_IMAGE: "${NODE_IMAGE:-}"
     container_name: grtblog-renderer
     environment:
       NODE_ENV: production

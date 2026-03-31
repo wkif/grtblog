@@ -1,4 +1,5 @@
-FROM node:22-alpine AS builder
+ARG NODE_IMAGE=
+FROM ${NODE_IMAGE:-node}:22-alpine AS builder
 
 # Corepack downloads pnpm via undici → often ECONNRESET behind flaky TLS (e.g. to registry.npmjs.org).
 # Install pnpm with npm instead; set registry when building in CN:
@@ -24,7 +25,8 @@ ENV APP_VERSION=${APP_VERSION} \
 
 RUN pnpm build
 
-FROM node:22-alpine AS runtime
+ARG NODE_IMAGE=
+FROM ${NODE_IMAGE:-node}:22-alpine AS runtime
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG PNPM_VERSION=10.33.0
