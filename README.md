@@ -195,6 +195,72 @@ grtblog-v2/
 已提供 API 迁移脚本：`scripts/migrate-v1-to-v2.mjs`
 使用说明见：`scripts/migrate-v1-to-v2.md`
 
+## 从 Markdown 导入文章 / 手记（SQL）
+
+将本地 **Hexo 风格** Markdown（YAML frontmatter + 正文）批量写入数据库，与后台「创建文章 / 手记」写入的表结构一致（含 `comment_area`、阅读量指标、可选标签关联）。需已能连接 **PostgreSQL**（与线上同一套迁移后的 schema）。未指定目录时，文章默认递归扫描 **`historyBlog/blog`**，手记默认递归扫描 **`historyBlog/moment`**（均在仓库根目录下，相对当前工作目录）。
+
+### 准备
+
+1. 安装依赖（在仓库根目录执行）：
+
+   ```bash
+   cd scripts && npm install && cd ..
+   ```
+
+2. **`--author-id`** 填管理后台对应用户的 `app_user.id`（一般为 `1` 或你在库里查到的作者 id）。
+
+3. 标签：若 frontmatter 里写了 `tags`，需在库里已有对应 `tag` 行，并准备 **名称 → id** 的 JSON（可参考 `scripts/tag-name-to-id.example.json`）。
+
+### Frontmatter 常用字段
+
+| 字段 | 说明 |
+|------|------|
+| `date` / `createdAt` / `created` / `updated` | 至少其一；无时区时按 `--default-tz`（默认 `Asia/Shanghai`）解析 |
+| `title` | 标题；省略则用正文第一个 `#` 标题或文件名 |
+| `abbrlink` / `slug` / `permalink` | 短链 `short_url` |
+| `tags` 或 `tag` | 标签名列表；需配合 `--tags-map` / `--topics-map` |
+| `summary` | 摘要；文章可空；手记空则取正文前 200 字 |
+| `cover` | 文章封面 URL；手记可同时作 `img` |
+| `img` | 手记配图（无 `cover` 时用） |
+
+### 生成 SQL
+
+在**仓库根目录**执行（路径相对当前目录）：
+
+```bash
+# 文章，默认扫描 ./historyBlog/blog；输出到文件
+node scripts/export-md-sql.mjs articles --author-id 1 --out import-articles.sql
+
+# 指定目录 + 标签映射
+node scripts/export-md-sql.mjs articles ./path/to/md --author-id 1 \
+  --tags-map scripts/tag-name-to-id.example.json --category-id 2
+
+# 手记，默认扫描 ./historyBlog/moment
+node scripts/export-md-sql.mjs moments --author-id 1 --out import-moments.sql
+
+# 手记 + 话题映射 + 专栏
+node scripts/export-md-sql.mjs moments --author-id 1 \
+  --topics-map scripts/tag-name-to-id.example.json --column-id 1 --out import-moments.sql
+```
+
+常用参数：
+
+- **`--no-dedupe`**：不做「库内已有同 `short_url` 则跳过」检查（默认会跳过并 `RAISE NOTICE`）。
+- **`--default-tz`**：解析无偏移日期时间用的时区（默认 `Asia/Shanghai`）。
+
+查看全部选项：`node scripts/export-md-sql.mjs help`
+
+### 执行导入
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f import-articles.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f import-moments.sql
+```
+
+将 `DATABASE_URL` 换成你的连接串（或 `psql -h -U -d` 等）。建议在备份库或事务可回滚环境先跑一遍。
+
+实现细节：`scripts/export-md-sql.mjs`（CLI）、`scripts/lib/md-migrate-core.mjs`（解析与哈希，与后端 `content_hash` 规则一致）。
+
 ## Star History
 
 <a href="https://star-history.com/#grtsinry43/grtblog&Date">

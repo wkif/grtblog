@@ -19,3 +19,10 @@ logs/
 
 # Prevent committing built server binary
 /server/api
+
+# Local Hexo/history sources and bulk-import artifacts (repo root)
+/historyBlog/blog/
+/historyBlog/moment/
+/import-articles.sql
+/import-moments.sql
+/tag-name-to-id.json

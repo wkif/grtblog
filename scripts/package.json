@@ -1,0 +1,9 @@
+{
+	"name": "grtblog-md-migrate",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"luxon": "^3.5.0",
+		"yaml": "^2.7.0"
+	}
+}
