@@ -78,6 +78,7 @@ function setupStateFromInitState(init: InitStateResponse): SetupStateResponse {
       ? []
       : ['website_name', 'public_url', 'description', 'keywords'],
     needsSetup: !initialized,
+    pendingUpgradeGuides: [],
   }
 }
 
