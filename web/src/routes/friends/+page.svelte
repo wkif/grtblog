@@ -7,6 +7,7 @@
 	import { userStore } from '$lib/shared/stores/userStore';
 	import { authModalStore } from '$lib/shared/stores/authModalStore';
 	import PageHeader from '$lib/ui/common/PageHeader.svelte';
+	import SafeMarkdownView from '$lib/shared/markdown/SafeMarkdownView.svelte';
 
 	let { data } = $props();
 
@@ -20,10 +21,10 @@
 </script>
 
 <div class="friends-page max-w-5xl mx-auto py-10 space-y-16">
-	<PageHeader 
-		title="友情链接" 
-		tag="Friends" 
-		subtitle="青山一道同云雨，明月何曾是两乡" 
+	<PageHeader
+		title="友情链接"
+		tag="Friends"
+		subtitle="青山一道同云雨，明月何曾是两乡"
 		description="志同道合者的数字家园，感谢在这个广袤网络中的相遇。"
 	/>
 
@@ -45,8 +46,8 @@
 				</h2>
 
 				{#if data.applyConfig.requirements}
-					<div class="text-xs text-ink-500 dark:text-ink-400 space-y-3 font-serif whitespace-pre-line">
-						{data.applyConfig.requirements}
+					<div class="text-xs text-ink-500 dark:text-ink-400 space-y-3 font-serif">
+						<SafeMarkdownView content={data.applyConfig.requirements} />
 					</div>
 				{:else}
 					<ul class="text-xs text-ink-500 dark:text-ink-400 space-y-3 font-serif">

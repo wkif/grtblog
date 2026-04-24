@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	appalbum "github.com/grtsinry43/grtblog-v2/server/internal/app/album"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/article"
 	appEvent "github.com/grtsinry43/grtblog-v2/server/internal/app/event"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/federation"
@@ -36,6 +37,7 @@ func RegisterArticleSubscribers(bus appEvent.Bus, service *Service) {
 				"home:recent-posts",
 				"home:activity-pulse",
 				"home:inspiration-stats",
+				"category:list",
 				"tag:list:public",
 				"timeline:by-year",
 				"post:list:page:1",
@@ -82,6 +84,7 @@ func RegisterMomentSubscribers(bus appEvent.Bus, service *Service) {
 				"home:recent-moments",
 				"home:activity-pulse",
 				"home:inspiration-stats",
+				"column:list",
 				"timeline:by-year",
 				"moment:list:page:1",
 				"moment:list:page:2",
@@ -145,6 +148,8 @@ func RegisterThinkingSubscribers(bus appEvent.Bus, service *Service) {
 				"home:inspiration-stats",
 				"timeline:by-year",
 				"thinking:list:page:1",
+				"thinking:list:page:2",
+				"thinking:list:page:3",
 			}
 			urls := []string{
 				"/",
@@ -216,6 +221,56 @@ func RegisterLayoutSubscribers(bus appEvent.Bus, service *Service) {
 	bus.Subscribe("navmenu.updated", handlerFunc(func(ctx context.Context, _ appEvent.Event) error {
 		return service.Invalidate(ctx, []string{"layout:nav"}, nil)
 	}))
+}
+
+func RegisterAlbumSubscribers(bus appEvent.Bus, service *Service) {
+	if bus == nil || service == nil {
+		return
+	}
+
+	register := func(eventName string) {
+		bus.Subscribe(eventName, handlerFunc(func(ctx context.Context, event appEvent.Event) error {
+			albumID, shortURL := extractAlbumEventPayload(event)
+			if albumID <= 0 {
+				return nil
+			}
+
+			deps := []string{
+				"album:list:page:1",
+				"album:list:page:2",
+				"album:list:page:3",
+				fmt.Sprintf("album:detail:%d", albumID),
+			}
+			urls := []string{"/albums"}
+			if shortURL != "" {
+				urls = append(urls, fmt.Sprintf("/albums/%s", shortURL))
+			}
+			return service.Invalidate(ctx, deps, urls)
+		}))
+	}
+
+	register(appalbum.AlbumCreated{}.Name())
+	register(appalbum.AlbumUpdated{}.Name())
+	register(appalbum.AlbumPublished{}.Name())
+	register(appalbum.AlbumUnpublished{}.Name())
+	register(appalbum.AlbumDeleted{}.Name())
+}
+
+func extractAlbumEventPayload(event appEvent.Event) (albumID int64, shortURL string) {
+	switch e := event.(type) {
+	case appalbum.AlbumCreated:
+		return e.ID, strings.TrimSpace(e.ShortURL)
+	case appalbum.AlbumUpdated:
+		return e.ID, strings.TrimSpace(e.ShortURL)
+	case appalbum.AlbumPublished:
+		return e.ID, strings.TrimSpace(e.ShortURL)
+	case appalbum.AlbumUnpublished:
+		return e.ID, strings.TrimSpace(e.ShortURL)
+	case appalbum.AlbumDeleted:
+		return e.ID, strings.TrimSpace(e.ShortURL)
+	default:
+		return 0, ""
+	}
 }
 
 func extractArticleEventPayload(event appEvent.Event) (articleID int64, shortURL string) {

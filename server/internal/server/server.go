@@ -22,13 +22,16 @@ import (
 
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/analytics"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/article"
+	"github.com/grtsinry43/grtblog-v2/server/internal/app/cleanup"
 	appfed "github.com/grtsinry43/grtblog-v2/server/internal/app/federation"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/health"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/htmlsnapshot"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/isr"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/sysconfig"
+	"github.com/grtsinry43/grtblog-v2/server/internal/app/telemetry"
 	"github.com/grtsinry43/grtblog-v2/server/internal/buildinfo"
 	"github.com/grtsinry43/grtblog-v2/server/internal/config"
+	albumdomain "github.com/grtsinry43/grtblog-v2/server/internal/domain/album"
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/comment"
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/content"
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/social"
@@ -56,7 +59,9 @@ type Server struct {
 	isrSvc        *isr.Service
 	fedSync       *appfed.SyncWorker
 	fedDeliver    *appfed.DeliveryService
+	cleanupSvc    *cleanup.Service
 	healthChecker *health.Checker
+	telemetrySvc  *telemetry.Service
 	version       string
 }
 
@@ -71,8 +76,11 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 	eventBus := infraevent.NewInMemoryBus()
 	sysCfgSvc := sysconfig.NewService(sysCfgRepo, cfg.Turnstile, eventBus)
 	contentRepo := persistence.NewContentRepository(db)
+	albumRepo := persistence.NewAlbumRepository(db)
+	thinkingRepo := persistence.NewThinkingRepository(db)
 	commentRepo := persistence.NewCommentRepository(db)
 	articleSvc := article.NewService(contentRepo, commentRepo, eventBus)
+	errorCollector := telemetry.NewCollector(24 * time.Hour)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	bodyLimit := sysCfgSvc.UploadMaxSizeBytes(ctx)
@@ -96,20 +104,33 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 					detail = fmt.Sprintf("%s cause=%v", detail, ae.Cause)
 				}
 				logRequestError(c, "biz", detail)
+				errorCollector.Record(telemetry.ErrorRecord{
+					Kind:     telemetry.KindBiz,
+					BizCode:  ae.Biz.BizErr,
+					Location: fmt.Sprintf("%s %s", c.Method(), c.Route().Path),
+					Message:  ae.Error(),
+				})
 				return response.ErrorWithMsg[any](c, ae.Biz, ae.Message)
 			}
 
 			// 2. Fiber 内置错误（比如 fiber.ErrNotFound / ErrMethodNotAllowed）
 			if fe, ok := err.(*fiber.Error); ok {
 				logRequestError(c, "http", fmt.Sprintf("status=%d msg=%s", fe.Code, fe.Message))
-				// 这里可以按需映射到你的 BizError
+				// Only collect server-side errors (5xx); skip 404/405 noise.
+				if fe.Code >= 500 {
+					errorCollector.Record(telemetry.ErrorRecord{
+						Kind:     telemetry.KindHTTP,
+						BizCode:  fmt.Sprintf("HTTP_%d", fe.Code),
+						Location: fmt.Sprintf("%s %s", c.Method(), c.Route().Path),
+						Message:  fe.Message,
+					})
+				}
 				switch fe.Code {
 				case fiber.StatusNotFound:
 					return response.ErrorFromBiz[any](c, response.NotFound)
 				case fiber.StatusMethodNotAllowed:
 					return response.ErrorFromBiz[any](c, response.MethodNotAllowed)
 				default:
-					// 其他 HTTP 错误，统一当作 SERVER_ERROR 或自定义映射
 					return response.ErrorFromBiz[any](c, response.ServerError)
 				}
 			}
@@ -121,7 +142,16 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 			}
 
 			// 3. 其他未识别错误，统一视为服务器内部错误
+			// Skip telemetry if already recorded by panic recovery (avoid double-counting).
 			logRequestError(c, "unhandled", fmt.Sprintf("err=%v", err))
+			if c.Locals("panicRecorded") == nil {
+				errorCollector.Record(telemetry.ErrorRecord{
+					Kind:     telemetry.KindUnhandled,
+					BizCode:  "SERVER_ERROR",
+					Location: fmt.Sprintf("%s %s", c.Method(), c.Route().Path),
+					Message:  err.Error(),
+				})
+			}
 			return response.ErrorFromBiz[any](c, response.ServerError)
 		},
 	})
@@ -136,6 +166,12 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 			} else {
 				log.Printf("[panic] %s %s: %v\n%s", c.Method(), c.Path(), e, stack)
 			}
+			errorCollector.Record(telemetry.ErrorRecord{
+				Kind:     telemetry.KindPanic,
+				Location: telemetry.NormaliseStack(stack),
+				Message:  fmt.Sprintf("%v", e),
+			})
+			c.Locals("panicRecorded", true)
 		},
 	}))
 
@@ -176,7 +212,7 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 	turnstileClient := turnstile.NewClient(cfg.Turnstile)
 	analyticsSvc := analytics.NewService(cfg, db, redisClient)
 	htmlSnapshotSvc := htmlsnapshot.NewService(contentRepo, cfg.App.HTMLSnapshotBaseURL, redisClient, cfg.Redis.Prefix)
-	isrSvc := isr.NewService(redisClient, cfg.Redis.Prefix, htmlSnapshotSvc, contentRepo)
+	isrSvc := isr.NewService(redisClient, cfg.Redis.Prefix, htmlSnapshotSvc, contentRepo, albumRepo, thinkingRepo)
 	httpStats := metrics.NewHTTPStats(6 * time.Hour)
 	fedResolver := fedinfra.NewResolver(&http.Client{Timeout: 10 * time.Second}, fedinfra.NewRedisCache(redisClient, cfg.Redis.Prefix))
 	fedOutbound := appfed.NewOutboundService(sysCfgSvc, fedResolver, persistence.NewFederationInstanceRepository(db))
@@ -218,6 +254,8 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 		return err
 	})
 
+	telemetrySvc := telemetry.NewService(errorCollector, db, httpStats, htmlSnapshotSvc, nil, sysCfgSvc, cfg.App.TelemetryDefaultEndpoint)
+
 	// 注册路由
 	router.Register(app, router.Dependencies{
 		DB:            db,
@@ -233,6 +271,8 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 		ISR:           isrSvc,
 		HealthState:   healthState,
 		HealthChecker: healthChecker,
+		FedSync:       fedSync,
+		Telemetry:     telemetrySvc,
 	})
 
 	return &Server{
@@ -248,7 +288,9 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 		isrSvc:        isrSvc,
 		fedSync:       fedSync,
 		fedDeliver:    fedDeliver,
+		cleanupSvc:    cleanup.NewService(persistence.NewCleanupRepository(db)),
 		healthChecker: healthChecker,
+		telemetrySvc:  telemetrySvc,
 		version:       buildinfo.Version(),
 	}
 }
@@ -289,6 +331,12 @@ func (s *Server) Start() error {
 	}
 	if s.fedDeliver != nil {
 		go s.runFederationRetryWorker()
+	}
+	// 启动数据清理定时任务（每 6 小时执行一次）
+	go s.cleanupSvc.Run(s.ctx, 6*time.Hour)
+	// 启动遥测上报后台任务
+	if s.telemetrySvc != nil {
+		go s.telemetrySvc.Reporter().Run(s.ctx)
 	}
 
 	addr := fmt.Sprintf(":%s", s.cfg.App.Port)
@@ -411,6 +459,8 @@ var notFoundSentinels = []error{
 	comment.ErrCommentNotFound,
 	comment.ErrCommentAreaNotFound,
 	social.ErrFriendLinkNotFound,
+	albumdomain.ErrAlbumNotFound,
+	albumdomain.ErrPhotoNotFound,
 }
 
 func isNotFoundSentinel(err error) bool {

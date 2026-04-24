@@ -31,7 +31,7 @@ ENV VITE_APP_BASE=${VITE_APP_BASE} \
 
 RUN pnpm build
 
-FROM ${GOLANG_IMAGE:-golang}:1.24.11-alpine AS builder
+FROM ${GOLANG_IMAGE:-golang:1.25-alpine} AS builder
 
 WORKDIR /src/server
 

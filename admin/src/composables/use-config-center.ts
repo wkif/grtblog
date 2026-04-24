@@ -1,7 +1,14 @@
 import { useMessage } from 'naive-ui'
 import { ref, reactive, computed, onMounted } from 'vue'
 
-import type { SysConfigTreeResponse, SysConfigItem, SysConfigUpdateItem, SysConfigGroup } from '@/services/sysconfig'
+import { firstVisibleCollapsiblePath } from './sysconfig-tree-visibility'
+
+import type {
+  SysConfigTreeResponse,
+  SysConfigItem,
+  SysConfigUpdateItem,
+  SysConfigGroup,
+} from '@/services/sysconfig'
 
 export type ConfigListFn = (keys?: string[]) => Promise<SysConfigTreeResponse>
 export type ConfigUpdateFn = (items: SysConfigUpdateItem[]) => Promise<SysConfigTreeResponse>
@@ -29,7 +36,7 @@ export function useConfigCenter(listFn: ConfigListFn, updateFn: ConfigUpdateFn) 
 
     const walk = (groups?: SysConfigGroup[]) => {
       if (!groups) return
-      groups.forEach(g => {
+      groups.forEach((g) => {
         if (g.items) result.push(...g.items)
         walk(g.children)
       })
@@ -41,9 +48,9 @@ export function useConfigCenter(listFn: ConfigListFn, updateFn: ConfigUpdateFn) 
   // --- 核心逻辑：初始化数据 ---
   function seedMaps(data: SysConfigTreeResponse) {
     // 清空现有数据
-    Object.keys(valueMap).forEach(k => delete valueMap[k])
-    Object.keys(originalMap).forEach(k => delete originalMap[k])
-    Object.keys(jsonBufferMap).forEach(k => delete jsonBufferMap[k])
+    Object.keys(valueMap).forEach((k) => delete valueMap[k])
+    Object.keys(originalMap).forEach((k) => delete originalMap[k])
+    Object.keys(jsonBufferMap).forEach((k) => delete jsonBufferMap[k])
 
     getAllItems(data).forEach((item) => {
       const key = item.key
@@ -69,10 +76,14 @@ export function useConfigCenter(listFn: ConfigListFn, updateFn: ConfigUpdateFn) 
     if (item.value !== undefined) return item.value
     if (item.defaultValue !== undefined) return item.defaultValue
     switch (item.valueType) {
-      case 'bool': return false
-      case 'number': return null
-      case 'json': return null
-      default: return ''
+      case 'bool':
+        return false
+      case 'number':
+        return null
+      case 'json':
+        return null
+      default:
+        return ''
     }
   }
 
@@ -142,16 +153,9 @@ export function useConfigCenter(listFn: ConfigListFn, updateFn: ConfigUpdateFn) 
       tree.value = data
       seedMaps(data)
 
-      // 自动展开所有组
-      const paths: string[] = []
-      const walk = (gs?: SysConfigGroup[]) => {
-        gs?.forEach(g => {
-          paths.push(g.path)
-          walk(g.children)
-        })
-      }
-      walk(data.groups)
-      expandedGroups.value = paths
+      // 默认只展开第一个可见折叠项（含 visibleWhen 级联隐藏、与 ConfigPanel 一致）
+      const firstPath = firstVisibleCollapsiblePath(data.groups, isItemVisible)
+      expandedGroups.value = firstPath ? [firstPath] : []
     } catch (e: any) {
       message.error(e.message || '加载配置失败')
     } finally {
@@ -201,8 +205,12 @@ export function useConfigCenter(listFn: ConfigListFn, updateFn: ConfigUpdateFn) 
     save,
     // 导出用于脏检查的计算属性
     pendingCount: computed(() => {
-      try { return buildUpdateItems().length } catch { return 0 }
-    })
+      try {
+        return buildUpdateItems().length
+      } catch {
+        return 0
+      }
+    }),
   }
 }
 

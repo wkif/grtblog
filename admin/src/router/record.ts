@@ -1,17 +1,4 @@
-import { NTag } from 'naive-ui'
-import { h } from 'vue'
-
 import type { MenuMixedOptions } from './interface'
-import { isFederationEnabled } from '@/utils/federation-gate'
-
-const FEDERATION_COMING_SOON = 'federation/ComingSoon'
-
-function withBetaTag(label: string) {
-  return () => h('span', { class: 'inline-flex items-center gap-2' }, [
-    h('span', label),
-    h(NTag, { size: 'small', type: 'warning', round: true, bordered: false }, { default: () => 'Beta' }),
-  ])
-}
 
 export const routeRecordRaw: MenuMixedOptions[] = [
   {
@@ -230,26 +217,56 @@ export const routeRecordRaw: MenuMixedOptions[] = [
       },
     ],
   },
-  // {
-  //   path: 'albums',
-  //   name: 'albumManagement',
-  //   icon: 'iconify ph--image',
-  //   label: '相册管理',
-  //   redirect: 'albums/list',
-  //   children: [
-  //     {
-  //       path: 'list',
-  //       name: 'albumList',
-  //       label: '相册列表',
-  //       icon: 'iconify ph--image',
-  //       meta: {
-  //         componentName: 'AlbumList',
-  //         showTab: true,
-  //       },
-  //       component: 'albums/index',
-  //     },
-  //   ],
-  // },
+  {
+    path: 'albums',
+    name: 'albumManagement',
+    icon: 'iconify ph--image',
+    label: '相册管理',
+    redirect: 'albums/list',
+    children: [
+      {
+        path: 'list',
+        name: 'albumList',
+        label: '相册列表',
+        icon: 'iconify ph--images',
+        meta: {
+          componentName: 'AlbumList',
+          showTab: true,
+        },
+        component: 'albums/index',
+      },
+      {
+        path: 'edit/new',
+        name: 'albumCreate',
+        label: '新建相册',
+        icon: 'iconify ph--pencil-simple-line',
+        meta: {
+          componentName: 'AlbumEdit',
+          showTab: true,
+          enableMultiTab: true,
+          renderTabTitle() {
+            return '新建相册'
+          },
+        },
+        component: 'albums/edit',
+      },
+      {
+        path: 'edit/:id',
+        name: 'albumEdit',
+        label: '编辑相册',
+        show: false,
+        meta: {
+          componentName: 'AlbumEdit',
+          showTab: true,
+          enableMultiTab: true,
+          renderTabTitle({ id }) {
+            return `编辑相册${id ? `-${id}` : ''}`
+          },
+        },
+        component: 'albums/edit',
+      },
+    ],
+  },
   {
     path: 'comments',
     name: 'commentManagement',
@@ -391,7 +408,7 @@ export const routeRecordRaw: MenuMixedOptions[] = [
     path: 'federation',
     name: 'unionManagement',
     icon: 'iconify ph--circles-three',
-    label: isFederationEnabled ? withBetaTag('联合') : '联合',
+    label: '联合',
     redirect: 'federation/instances',
     children: [
       {
@@ -403,7 +420,7 @@ export const routeRecordRaw: MenuMixedOptions[] = [
           componentName: 'FederationInstances',
           showTab: true,
         },
-        component: isFederationEnabled ? 'federation/instances/index' : FEDERATION_COMING_SOON,
+        component: 'federation/instances/index',
       },
       {
         path: 'outbound',
@@ -414,7 +431,7 @@ export const routeRecordRaw: MenuMixedOptions[] = [
           componentName: 'FederationOutbound',
           showTab: true,
         },
-        component: isFederationEnabled ? 'federation/outbound/index' : FEDERATION_COMING_SOON,
+        component: 'federation/outbound/index',
       },
       {
         path: 'activitypub-outbox',
@@ -425,7 +442,7 @@ export const routeRecordRaw: MenuMixedOptions[] = [
           componentName: 'ActivityPubOutbox',
           showTab: true,
         },
-        component: isFederationEnabled ? 'federation/activitypub-outbox/index' : FEDERATION_COMING_SOON,
+        component: 'federation/activitypub-outbox/index',
       },
       {
         path: 'reviews',
@@ -436,7 +453,7 @@ export const routeRecordRaw: MenuMixedOptions[] = [
           componentName: 'FederationReviews',
           showTab: true,
         },
-        component: isFederationEnabled ? 'federation/reviews/index' : FEDERATION_COMING_SOON,
+        component: 'federation/reviews/index',
       },
       {
         path: 'debug',
@@ -448,7 +465,7 @@ export const routeRecordRaw: MenuMixedOptions[] = [
           componentName: 'FederationDebug',
           showTab: true,
         },
-        component: isFederationEnabled ? 'federation/debug/OutboundRequest' : FEDERATION_COMING_SOON,
+        component: 'federation/debug/OutboundRequest',
       },
     ],
   },

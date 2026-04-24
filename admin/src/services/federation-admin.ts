@@ -1,4 +1,5 @@
 import { request } from './http'
+
 import type {
   FederationAdminCitationReq,
   FederationAdminMentionReq,
@@ -18,6 +19,7 @@ import type {
   FederationOutboundDeliveryListResp,
   FederationOutboundDeliveryResp,
   FederationOutboundListReq,
+  FederationRemotePostListResp,
   FederationReviewDecisionReq,
   FederationReviewListResp,
 } from '@/types/federation'
@@ -68,14 +70,20 @@ export function getFederationPendingReviews() {
   })
 }
 
-export function reviewFederationCitation(id: number | string, decision: FederationReviewDecisionReq) {
+export function reviewFederationCitation(
+  id: number | string,
+  decision: FederationReviewDecisionReq,
+) {
   return request<void>(`/admin/federation/citations/${id}/review`, {
     method: 'PUT',
     body: decision,
   })
 }
 
-export function reviewFederationMention(id: number | string, decision: FederationReviewDecisionReq) {
+export function reviewFederationMention(
+  id: number | string,
+  decision: FederationReviewDecisionReq,
+) {
   return request<void>(`/admin/federation/mentions/${id}/review`, {
     method: 'PUT',
     body: decision,
@@ -133,6 +141,12 @@ export function listFederationInstancePosts(instanceId: number, query?: string, 
   })
 }
 
+export function fetchRemotePosts(url: string, query?: string, page = 1, pageSize = 20) {
+  return request<FederationRemotePostListResp>('/admin/federation/remote/posts', {
+    method: 'GET',
+    query: { url, query: query || '', page, pageSize },
+  })
+}
 
 export function listActivityPubOutbox(query: ActivityPubOutboxListReq) {
   return request<ActivityPubOutboxListResp>('/admin/activitypub/outbox', {

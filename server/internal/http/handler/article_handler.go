@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -427,6 +426,7 @@ func (h *ArticleHandler) ListSamePeriodMoments(c *fiber.Ctx) error {
 	const limit = 2
 	start := articleItem.CreatedAt.AddDate(0, 0, -windowDays)
 	end := articleItem.CreatedAt.AddDate(0, 0, windowDays)
+	siteTZ := h.apCfgSvc.Timezone(c.Context())
 
 	moments, err := h.contentRepo.ListPublishedMomentsByCreatedAtRange(c.Context(), start, end, limit)
 	if err != nil {
@@ -440,7 +440,7 @@ func (h *ArticleHandler) ListSamePeriodMoments(c *fiber.Ctx) error {
 			Title:     item.Title,
 			ShortURL:  item.ShortURL,
 			Summary:   item.Summary,
-			CreatedAt: item.CreatedAt,
+			CreatedAt: item.CreatedAt.In(siteTZ),
 		}
 		if item.Image != nil {
 			resp.Image = splitImages(item.Image)
@@ -821,9 +821,7 @@ func (h *ArticleHandler) toArticleResp(ctx context.Context, article *content.Art
 	resp.TOC = mapTOCNodes(article.TOC)
 	resp.ExtInfo = jsonRawFromBytes(article.ExtInfo)
 	resp.AllowComment = h.allowCommentByAreaID(ctx, article.CommentID)
-	fediverseReplyURL, fediverseObjectURL := h.buildFediverseReplyLinks(ctx, article)
-	resp.FediverseReplyURL = fediverseReplyURL
-	resp.FediverseObjectURL = fediverseObjectURL
+	resp.FediverseObjectURL = h.buildFediverseObjectURL(ctx, article)
 
 	if article.CategoryID != nil {
 		category, catErr := h.contentRepo.GetCategoryByID(ctx, *article.CategoryID)
@@ -941,65 +939,53 @@ func (h *ArticleHandler) allowCommentByAreaID(ctx context.Context, areaID *int64
 	return !area.IsClosed
 }
 
-func (h *ArticleHandler) buildFediverseReplyLinks(ctx context.Context, article *content.Article) (*string, *string) {
+func (h *ArticleHandler) buildFediverseObjectURL(ctx context.Context, article *content.Article) *string {
 	if h.apCfgSvc == nil || article == nil {
-		return nil, nil
+		return nil
 	}
 	settings, err := h.apCfgSvc.ActivityPubSettings(ctx)
 	if err != nil || !settings.Enabled {
-		return nil, nil
+		return nil
 	}
-	baseURL := strings.TrimRight(strings.TrimSpace(settings.InstanceURL), "/")
-	if baseURL == "" {
-		return nil, nil
+	if article.ActivityPubObjectID == nil {
+		return nil
 	}
-	shortURL := strings.Trim(strings.TrimSpace(article.ShortURL), "/")
-	if shortURL == "" {
-		return nil, nil
-	}
-
-	articleURL := baseURL + "/posts/" + shortURL
-	objectURL := ""
-	if article.ActivityPubObjectID != nil {
-		objectURL = strings.TrimSpace(*article.ActivityPubObjectID)
-	}
+	objectURL := strings.TrimSpace(*article.ActivityPubObjectID)
 	if objectURL == "" {
-		return nil, nil
+		return nil
 	}
-	objectPtr := &objectURL
-
-	replyTemplate := strings.TrimSpace(settings.FediverseReplyTemplate)
-	if replyTemplate == "" {
-		return nil, objectPtr
-	}
-	replyURL := buildFediverseReplyURL(replyTemplate, articleURL, objectURL)
-	replyURL = strings.TrimSpace(replyURL)
-	if replyURL == "" {
-		return nil, objectPtr
-	}
-	return &replyURL, objectPtr
+	return &objectURL
 }
 
-func buildFediverseReplyURL(template string, articleURL string, objectURL string) string {
-	tpl := strings.TrimSpace(template)
-	if tpl == "" {
-		return ""
+// GetArticleMetrics godoc
+// @Summary 获取文章指标
+// @Tags Article
+// @Produce json
+// @Param id path int true "文章ID"
+// @Success 200 {object} contract.MetricsResp
+// @Router /articles/{id}/metrics [get]
+func (h *ArticleHandler) GetArticleMetrics(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return response.NewBizErrorWithMsg(response.ParamsError, "无效的文章ID")
 	}
-	encodedArticle := url.QueryEscape(strings.TrimSpace(articleURL))
-	encodedObject := url.QueryEscape(strings.TrimSpace(objectURL))
-	replaced := false
-	if strings.Contains(tpl, "{url}") {
-		tpl = strings.ReplaceAll(tpl, "{url}", encodedArticle)
-		replaced = true
+
+	metrics, err := h.svc.GetArticleMetrics(c.Context(), id)
+	if err != nil {
+		if errors.Is(err, content.ErrArticleNotFound) {
+			return response.NewBizErrorWithMsg(response.NotFound, "文章不存在")
+		}
+		return err
 	}
-	if strings.Contains(tpl, "{object}") {
-		tpl = strings.ReplaceAll(tpl, "{object}", encodedObject)
-		replaced = true
+
+	resp := contract.MetricsResp{}
+	if metrics != nil {
+		resp.Views = metrics.Views
+		resp.Likes = metrics.Likes
+		resp.Comments = metrics.Comments
 	}
-	if replaced {
-		return tpl
-	}
-	return tpl + encodedArticle
+
+	return response.Success(c, resp)
 }
 
 func (h *ArticleHandler) expandFederationContent(ctx context.Context, art *content.Article, contentStr string) string {

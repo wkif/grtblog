@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { NButton, NModal, useMessage } from 'naive-ui'
+import { ref } from 'vue'
 
 import {
   exportFederationConfigs,
@@ -10,11 +10,10 @@ import {
   updateActivityPubConfigs,
   updateFederationConfigs,
 } from '@/services/sysconfig'
-import type { ConfigExportData } from '@/services/sysconfig'
-import { isFederationEnabled } from '@/utils/federation-gate'
-import { ComingSoon } from '@/components'
 
 import ConfigPanel from '../ConfigPanel'
+
+import type { ConfigExportData } from '@/services/sysconfig'
 
 const emit = defineEmits<{ 'dirty-change': [dirty: boolean] }>()
 const message = useMessage()
@@ -108,18 +107,21 @@ async function confirmImport() {
 </script>
 
 <template>
-  <ComingSoon
-    v-if="!isFederationEnabled"
-    title="Federation 联合设置"
-    description="Blog Federation 与 ActivityPub 兼容功能的设置尚未开放，敬请期待后续版本。"
-    icon="ph--circles-three"
-  />
-  <div v-else class="space-y-6">
+  <div class="space-y-6">
     <div class="flex items-center gap-2">
-      <NButton size="small" secondary :loading="exporting" @click="handleExport">
+      <NButton
+        size="small"
+        secondary
+        :loading="exporting"
+        @click="handleExport"
+      >
         导出配置
       </NButton>
-      <NButton size="small" secondary @click="triggerImport">
+      <NButton
+        size="small"
+        secondary
+        @click="triggerImport"
+      >
         导入配置
       </NButton>
       <input
@@ -160,11 +162,10 @@ async function confirmImport() {
     >
       <template v-if="pendingImportData">
         <p>
-          即将导入 <strong>{{ pendingImportData.configs.length }}</strong> 项配置，现有的同名配置将被覆盖。
+          即将导入
+          <strong>{{ pendingImportData.configs.length }}</strong> 项配置，现有的同名配置将被覆盖。
         </p>
-        <p class="mt-1 text-xs text-neutral-500">
-          导出时间：{{ pendingImportData.exportedAt }}
-        </p>
+        <p class="mt-1 text-xs text-neutral-500">导出时间：{{ pendingImportData.exportedAt }}</p>
       </template>
     </NModal>
   </div>

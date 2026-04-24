@@ -262,7 +262,11 @@ watch(
       :query="mentionPicker.state.query"
       :results="mentionPicker.state.results"
       :loading="mentionPicker.state.loading"
-      @update:show="(v) => { if (!v) mentionPicker.close() }"
+      @update:show="
+        (v) => {
+          if (!v) mentionPicker.close()
+        }
+      "
       @search="mentionPicker.search"
       @select="mentionPicker.insert"
       @insertRaw="mentionPicker.insertRaw"
@@ -271,19 +275,32 @@ watch(
     <EditorCitationPicker
       :show="citationPicker.state.show"
       :step="citationPicker.state.step"
+      :url-input="citationPicker.state.urlInput"
+      :url-valid="citationPicker.state.urlValid"
+      :url-error="citationPicker.state.urlError"
       :instances="citationPicker.state.instances"
-      :instance-filter="citationPicker.state.instanceFilter"
-      :selected-instance="citationPicker.state.selectedInstance"
+      :instances-loading="citationPicker.state.instancesLoading"
       :posts="citationPicker.state.posts"
+      :posts-loading="citationPicker.state.postsLoading"
       :search-query="citationPicker.state.searchQuery"
-      :loading="citationPicker.state.loading"
-      @update:show="(v) => { if (!v) citationPicker.close() }"
-      @selectInstance="citationPicker.selectInstance"
-      @searchPosts="citationPicker.searchPosts"
-      @filterInstances="(v) => { citationPicker.state.instanceFilter = v }"
+      :page="citationPicker.state.page"
+      :total="citationPicker.state.total"
+      :page-size="citationPicker.state.pageSize"
+      :resolved-u-r-l="citationPicker.state.resolvedURL"
+      :resolved-name="citationPicker.state.resolvedName"
+      @update:show="
+        (v: boolean) => {
+          if (!v) citationPicker.close()
+        }
+      "
+      @url-input="citationPicker.onURLInput"
+      @submit-u-r-l="citationPicker.submitURL"
+      @select-instance="citationPicker.selectInstance"
+      @search-posts="citationPicker.searchPosts"
+      @go-to-page="citationPicker.goToPage"
       @select="citationPicker.insert"
       @back="citationPicker.back"
-      @insertRaw="citationPicker.insertRaw"
+      @insert-raw="citationPicker.insertRaw"
     />
   </div>
 </template>

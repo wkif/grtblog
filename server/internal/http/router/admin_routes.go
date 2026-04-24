@@ -17,9 +17,11 @@ import (
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/globalnotification"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/hitokoto"
 	applike "github.com/grtsinry43/grtblog-v2/server/internal/app/like"
+	"github.com/grtsinry43/grtblog-v2/server/internal/app/setupstate"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/sysconfig"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/handler"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/middleware"
+	"github.com/grtsinry43/grtblog-v2/server/internal/http/response"
 	fedinfra "github.com/grtsinry43/grtblog-v2/server/internal/infra/federation"
 	"github.com/grtsinry43/grtblog-v2/server/internal/infra/persistence"
 	"github.com/grtsinry43/grtblog-v2/server/internal/ws"
@@ -138,6 +140,7 @@ func registerAdminRoutes(v2 fiber.Router, deps Dependencies, websiteInfoHandler 
 		persistence.NewFederatedMentionRepository(deps.DB),
 		instanceRepo,
 		outbound,
+		deps.EventBus,
 	)
 	activityPubSvc := appap.NewService(
 		sysCfgSvc,
@@ -164,6 +167,7 @@ func registerAdminRoutes(v2 fiber.Router, deps Dependencies, websiteInfoHandler 
 	admin.Get("/federation/activitypub/outbox/:id", activityPubAdminHandler.GetOutbox)
 	admin.Post("/federation/activitypub/outbox/:id/retry", activityPubAdminHandler.RetryOutbox)
 	admin.Get("/federation/remote/check", federationAdminHandler.CheckRemote)
+	admin.Get("/federation/remote/posts", federationAdminHandler.FetchRemotePosts)
 	admin.Get("/federation/instances", federationAdminHandler.ListInstances)
 	admin.Get("/federation/instances/:id", federationAdminHandler.GetInstance)
 	admin.Get("/federation/instances/:id/posts", federationAdminHandler.ListInstancePosts)
@@ -183,7 +187,7 @@ func registerAdminRoutes(v2 fiber.Router, deps Dependencies, websiteInfoHandler 
 
 	friendLinkAppRepo := persistence.NewFriendLinkApplicationRepository(deps.DB)
 	friendLinkSyncJobRepo := persistence.NewFriendLinkSyncJobRepository(deps.DB)
-	friendLinkAdminSvc := friendlink.NewAdminService(friendLinkAppRepo, friendLinkRepo, instanceRepo, identityRepo, deps.EventBus)
+	friendLinkAdminSvc := friendlink.NewAdminService(friendLinkAppRepo, friendLinkRepo, instanceRepo, identityRepo, outbound, deps.EventBus)
 	friendLinkAdminHandler := handler.NewFriendLinkAdminHandler(friendLinkAdminSvc, friendLinkSyncJobRepo)
 	admin.Get("/friend-links/applications", friendLinkAdminHandler.ListApplications)
 	admin.Put("/friend-links/applications/:id/approve", friendLinkAdminHandler.ApproveApplication)
@@ -206,6 +210,26 @@ func registerAdminRoutes(v2 fiber.Router, deps Dependencies, websiteInfoHandler 
 	admin.Put("/global-notifications/:id", globalNotificationHandler.Update)
 	admin.Delete("/global-notifications/:id", globalNotificationHandler.Delete)
 
+	setupSvc := setupstate.NewService(identityRepo, sysCfgSvc)
+	admin.Post("/system/complete-upgrade-guide", func(c *fiber.Ctx) error {
+		var body struct {
+			Version string `json:"version"`
+		}
+		if err := c.BodyParser(&body); err != nil || body.Version == "" {
+			return response.NewBizErrorWithMsg(response.ParamsError, "version 不能为空")
+		}
+		if err := setupSvc.CompleteUpgradeGuide(c.Context(), body.Version); err != nil {
+			return response.NewBizErrorWithMsg(response.ServerError, "完成升级引导失败")
+		}
+		return response.SuccessWithMessage[any](c, nil, "升级引导已完成")
+	})
+	admin.Post("/system/complete-all-upgrade-guides", func(c *fiber.Ctx) error {
+		if err := setupSvc.CompleteAllUpgradeGuides(c.Context()); err != nil {
+			return response.NewBizErrorWithMsg(response.ServerError, "完成升级引导失败")
+		}
+		return response.SuccessWithMessage[any](c, nil, "升级引导已完成")
+	})
+
 	logHandler := handler.NewAdminLogHandler("storage/logs/app.log", 200)
 	systemHandler := handler.NewSystemHandler(deps.Config.App, deps.DB, deps.Redis, deps.EventBus, deps.HealthState)
 	adminStatsSvc := adminstats.NewService(deps.DB, deps.Redis, deps.Config.Redis.Prefix, wsManager)
@@ -226,6 +250,14 @@ func registerAdminRoutes(v2 fiber.Router, deps Dependencies, websiteInfoHandler 
 	admin.Get("/observability/pages", observabilityHandler.GetPageState)
 	admin.Post("/observability/pages/bootstrap", observabilityHandler.BootstrapPages)
 	admin.Post("/observability/pages/invalidate", observabilityHandler.InvalidatePages)
+
+	// Telemetry: anonymous error collection for self-improvement
+	telemetryHandler := handler.NewAdminTelemetryHandler(deps.Telemetry)
+	admin.Get("/telemetry/snapshot", telemetryHandler.GetSnapshot)
+	admin.Get("/telemetry/stats", telemetryHandler.GetStats)
+	admin.Post("/telemetry/reset", telemetryHandler.ResetErrors)
+	admin.Get("/telemetry/report-history", telemetryHandler.GetReportHistory)
+	admin.Post("/telemetry/report-now", telemetryHandler.ReportNow)
 
 	// AI 功能
 	aiHandler := handler.NewAIHandler(aiSvc)

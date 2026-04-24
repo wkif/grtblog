@@ -12,7 +12,7 @@
 	import { navigating } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
-	import { onNavigate } from '$app/navigation';
+	import { beforeNavigate, onNavigate } from '$app/navigation';
 	import SearchModal from '$lib/ui/search/SearchModal.svelte';
 	import Footer from '$lib/ui/layout/Footer.svelte';
 	import FloatingWindow from '$lib/ui/common/FloatingWindow.svelte';
@@ -32,6 +32,16 @@
 	import { userStore } from '$lib/shared/stores/userStore';
 	import { get } from 'svelte/store';
 
+	function logClientRuntimeError(
+		kind: 'error' | 'unhandledrejection',
+		message: string,
+		detail: string
+	) {
+		console.error(
+			`[renderer][client-error] side=client code=runtime kind=${kind} path=${page.url.pathname} message=${message}\n${detail}`
+		);
+	}
+
 	function handleKeydown(event: KeyboardEvent) {
 		if ((event.metaKey || event.ctrlKey) && (event.key === 'k' || event.key === 'K')) {
 			event.preventDefault();
@@ -39,8 +49,38 @@
 		}
 	}
 
+	function isAlbumDetailPath(pathname: string | null | undefined) {
+		return typeof pathname === 'string' && /^\/albums\/[^/]+$/.test(pathname);
+	}
+
+	function isAlbumPhotoPath(pathname: string | null | undefined) {
+		return typeof pathname === 'string' && /^\/albums\/[^/]+\/photo\/[^/]+$/.test(pathname);
+	}
+
+	function shouldSkipNativeViewTransition(
+		fromPath: string | null | undefined,
+		toPath: string | null | undefined
+	) {
+		return (
+			(isAlbumDetailPath(fromPath) && isAlbumPhotoPath(toPath)) ||
+			(isAlbumPhotoPath(fromPath) && isAlbumDetailPath(toPath))
+		);
+	}
+
+	/**
+	 * Avoid back animation and LCP delay caused by lang time animation.
+	 * reference: https://innei.in/posts/design/page-transition-animation-and-lcp
+	 */
+	beforeNavigate(({ type, willUnload }) => {
+		if (willUnload || typeof document === 'undefined') return;
+		document.documentElement.dataset.navType = type === 'popstate' ? 'back' : 'forward';
+	});
+
 	onNavigate((navigation) => {
 		if (typeof document === 'undefined' || !document.startViewTransition) return;
+		const fromPath = navigation.from?.url.pathname;
+		const toPath = navigation.to?.url.pathname;
+		if (shouldSkipNativeViewTransition(fromPath, toPath)) return;
 		const startViewTransition = document.startViewTransition.bind(document);
 
 		return new Promise((resolve) => {
@@ -56,7 +96,7 @@
 	import '@fontsource/noto-serif-sc/500.css';
 	import '@fontsource/noto-serif-sc/600.css';
 	import '@fontsource/noto-serif-sc/700.css';
-	import '@fontsource-variable/victor-mono';
+	import '@fontsource-variable/victor-mono/index.css';
 	import { websiteInfoCtx } from '$lib/features/website-info/context.js';
 	import { resolveSeoMeta } from '$lib/shared/seo/metadata';
 	import { resolveHomeThemeConfig } from '$lib/features/home/theme';
@@ -67,6 +107,13 @@
 		type DetailPanelRelatedMoment,
 		type DetailPanelRelatedPost
 	} from '$lib/shared/detail-panel/context';
+
+	type ThinkingWindowData = {
+		areaId?: number | null;
+		commentsCount?: number;
+		thinkingId?: number;
+		activityPubObjectId?: string | null;
+	};
 
 	let { children, data } = $props();
 	let showRouteLoading = $state(false);
@@ -146,9 +193,14 @@
 	const avatarOrigin = $derived.by(() => {
 		const url = resolveHomeThemeConfig($websiteInfoStore).hero?.avatarUrl;
 		if (!url) return null;
-		try { return new URL(url).origin; } catch { return null; }
+		try {
+			return new URL(url).origin;
+		} catch {
+			return null;
+		}
 	});
-	const normalizeIconUrl = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+	const normalizeIconUrl = (value: unknown): string =>
+		typeof value === 'string' ? value.trim() : '';
 	const inferIconMimeType = (iconUrl: string): string | null => {
 		const lower = iconUrl.toLowerCase();
 		const cleaned = lower.split('#')[0]?.split('?')[0] || lower;
@@ -191,10 +243,15 @@
 			}
 		};
 		img.src = src;
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	});
 	const resolvedFavicon = $derived(circularFaviconUrl || siteFavicon);
-	const resolvedFaviconType = $derived(circularFaviconUrl ? 'image/png' : (siteFaviconType || undefined));
+	const resolvedFaviconType = $derived(
+		circularFaviconUrl ? 'image/png' : siteFaviconType || undefined
+	);
+	const thinkingWindowData = $derived((windowStore.data ?? {}) as ThinkingWindowData);
 
 	const seoMeta = $derived.by(() =>
 		resolveSeoMeta({
@@ -215,6 +272,25 @@
 	}
 
 	onMount(() => {
+		const handleWindowError = (event: ErrorEvent) => {
+			const message = event.message || 'Unhandled client error';
+			const detail =
+				event.error instanceof Error
+					? `${event.error.name}: ${event.error.message}${event.error.stack ? `\n${event.error.stack}` : ''}`
+					: `${event.filename || 'unknown'}:${event.lineno || 0}:${event.colno || 0}`;
+			logClientRuntimeError('error', message, detail);
+		};
+		const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+			const reason = event.reason;
+			const detail =
+				reason instanceof Error
+					? `${reason.name}: ${reason.message}${reason.stack ? `\n${reason.stack}` : ''}`
+					: String(reason);
+			logClientRuntimeError('unhandledrejection', 'Unhandled promise rejection', detail);
+		};
+		window.addEventListener('error', handleWindowError);
+		window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
 		initTheme(theme);
 		consoleLogInfo();
 		presenceStore.start();
@@ -238,6 +314,8 @@
 		}
 
 		return () => {
+			window.removeEventListener('error', handleWindowError);
+			window.removeEventListener('unhandledrejection', handleUnhandledRejection);
 			presenceStore.stop();
 			ownerStatusStore.stop();
 			siteHealthStore.stop();
@@ -279,7 +357,7 @@
 
 <svelte:head>
 	{#if avatarOrigin}
-		<link rel="preconnect" href={avatarOrigin} crossorigin />
+		<link rel="preconnect" href={avatarOrigin} crossorigin="anonymous" />
 		<link rel="dns-prefetch" href={avatarOrigin} />
 	{/if}
 	<link rel="icon" href={resolvedFavicon} type={resolvedFaviconType} />
@@ -287,7 +365,10 @@
 	<link rel="apple-touch-icon" href={resolvedFavicon} />
 	<title>{seoMeta.title}</title>
 	<link rel="canonical" href={seoMeta.canonicalUrl} />
-	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+	<meta
+		name="viewport"
+		content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+	/>
 	<meta name="description" content={seoMeta.description} />
 	<meta name="keywords" content={seoMeta.keywords} />
 	<meta name="robots" content={seoMeta.robots} />
@@ -385,10 +466,10 @@
 		<PresencePagesWindow />
 	{:else if windowStore.kind === 'thinking-comments'}
 		<ThinkingCommentsWindow
-			areaId={windowStore.data?.areaId}
-			commentsCount={windowStore.data?.commentsCount ?? 0}
-			thinkingId={Number(windowStore.data?.thinkingId) || 0}
-			activityPubObjectId={windowStore.data?.activityPubObjectId ?? null}
+			areaId={thinkingWindowData.areaId ?? null}
+			commentsCount={thinkingWindowData.commentsCount ?? 0}
+			thinkingId={thinkingWindowData.thinkingId ?? 0}
+			activityPubObjectId={thinkingWindowData.activityPubObjectId ?? null}
 		/>
 	{:else if windowStore.kind === 'user-center'}
 		<QueryRoot

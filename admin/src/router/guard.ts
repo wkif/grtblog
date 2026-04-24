@@ -3,9 +3,11 @@ import { isEmpty } from 'lodash-es'
 import { useEventBus } from '@/event-bus'
 import { getSetupState } from '@/services/auth'
 import { useUserStore, toRefsUserStore } from '@/stores'
-import { isFederationBetaRoute, showFederationBetaDialog } from '@/utils/federation-beta'
-import { isFederationEnabled } from '@/utils/federation-gate'
-import { applyDocumentTitle, ensureBackendSiteName, getCachedSiteName } from '@/utils/document-title'
+import {
+  applyDocumentTitle,
+  ensureBackendSiteName,
+  getCachedSiteName,
+} from '@/utils/document-title'
 
 import type { Router } from 'vue-router'
 
@@ -26,28 +28,19 @@ async function getCachedSetupState(force = false) {
   return state
 }
 
+// Reset when user logs out so the guide is re-checked on next login.
+let upgradeGuideChecked = false
+export function resetUpgradeGuideCheck() {
+  upgradeGuideChecked = false
+}
+
 export function setupRouterGuard(router: Router) {
   const { resolveMenuRoute, cleanup, refreshAccessInfo } = useUserStore()
 
   const { token, user } = toRefsUserStore()
   const { routerEventBus } = useEventBus()
-  let allowFederationRouteOnce = false
-
   router.beforeEach(async (to, _from, next) => {
     routerEventBus.emit('beforeEach')
-
-    if (isFederationEnabled && isFederationBetaRoute(to)) {
-      if (allowFederationRouteOnce) {
-        allowFederationRouteOnce = false
-      } else {
-        const confirmed = await showFederationBetaDialog()
-        if (!confirmed) {
-          next(false)
-          return false
-        }
-        allowFederationRouteOnce = true
-      }
-    }
 
     if (to.name === 'init') {
       if (token.value) {
@@ -86,6 +79,25 @@ export function setupRouterGuard(router: Router) {
       return false
     }
 
+    // Allow upgrade guide page through if user has token
+    if (to.name === 'upgradeGuide') {
+      if (!token.value) {
+        next({ name: 'signIn' })
+        return false
+      }
+      if (user.value.id === null) {
+        try {
+          await refreshAccessInfo()
+        } catch {
+          cleanup()
+          next({ name: 'signIn' })
+          return false
+        }
+      }
+      next()
+      return false
+    }
+
     if (!token.value) {
       try {
         const setupState = await getCachedSetupState()
@@ -113,6 +125,23 @@ export function setupRouterGuard(router: Router) {
         cleanup()
         next()
         return false
+      }
+    }
+
+    // Check upgrade guide once per session after login.
+    // Set flag before await to prevent concurrent navigations from double-redirecting.
+    // Reset on error so it retries on the next navigation.
+    if (token.value && !upgradeGuideChecked) {
+      upgradeGuideChecked = true
+      try {
+        const setupState = await getCachedSetupState(true)
+        if (setupState.pendingUpgradeGuides?.length > 0 && user.value.isAdmin) {
+          next({ name: 'upgradeGuide' })
+          return false
+        }
+      } catch (error) {
+        upgradeGuideChecked = false
+        console.error('Error checking upgrade guide state:', error)
       }
     }
 

@@ -17,8 +17,15 @@ Thumbs.db
 logs/
 *.log
 
-# Prevent committing built server binary
+# Local export artifacts
+exports/
+
+# Prevent committing built server binaries
 /server/api
+/telemetry-server/telemetry-server
+
+.claude/
+.codex
 
 # Local Hexo/history sources and bulk-import artifacts (repo root)
 /historyBlog/blog/

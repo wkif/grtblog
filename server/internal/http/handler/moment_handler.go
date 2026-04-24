@@ -14,6 +14,7 @@ import (
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/identity"
 
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/moment"
+	"github.com/grtsinry43/grtblog-v2/server/internal/app/sysconfig"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/contract"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/middleware"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/response"
@@ -24,14 +25,16 @@ type MomentHandler struct {
 	contentRepo content.Repository
 	commentRepo domaincomment.CommentRepository
 	userRepo    identity.Repository
+	sysCfg      *sysconfig.Service
 }
 
-func NewMomentHandler(svc *moment.Service, contentRepo content.Repository, commentRepo domaincomment.CommentRepository, userRepo identity.Repository) *MomentHandler {
+func NewMomentHandler(svc *moment.Service, contentRepo content.Repository, commentRepo domaincomment.CommentRepository, userRepo identity.Repository, sysCfg *sysconfig.Service) *MomentHandler {
 	return &MomentHandler{
 		svc:         svc,
 		contentRepo: contentRepo,
 		commentRepo: commentRepo,
 		userRepo:    userRepo,
+		sysCfg:      sysCfg,
 	}
 }
 
@@ -349,6 +352,7 @@ func (h *MomentHandler) ListSamePeriodArticles(c *fiber.Ctx) error {
 	const limit = 2
 	start := momentItem.CreatedAt.AddDate(0, 0, -windowDays)
 	end := momentItem.CreatedAt.AddDate(0, 0, windowDays)
+	siteTZ := h.sysCfg.Timezone(c.Context())
 
 	articles, err := h.contentRepo.ListPublishedArticlesByCreatedAtRange(c.Context(), start, end, limit)
 	if err != nil {
@@ -362,7 +366,7 @@ func (h *MomentHandler) ListSamePeriodArticles(c *fiber.Ctx) error {
 			Title:     item.Title,
 			ShortURL:  item.ShortURL,
 			Summary:   item.Summary,
-			CreatedAt: item.CreatedAt,
+			CreatedAt: item.CreatedAt.In(siteTZ),
 		}
 		if item.Cover != nil {
 			resp.Cover = *item.Cover
@@ -720,6 +724,37 @@ func (h *MomentHandler) BatchDeleteMoments(c *fiber.Ctx) error {
 	return response.SuccessWithMessage[any](c, nil, "手记批量删除成功")
 }
 
+// GetMomentMetrics godoc
+// @Summary 获取手记指标
+// @Tags Moment
+// @Produce json
+// @Param id path int true "手记ID"
+// @Success 200 {object} contract.MetricsResp
+// @Router /moments/{id}/metrics [get]
+func (h *MomentHandler) GetMomentMetrics(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return response.NewBizErrorWithMsg(response.ParamsError, "无效的手记ID")
+	}
+
+	metrics, err := h.svc.GetMomentMetrics(c.Context(), id)
+	if err != nil {
+		if errors.Is(err, content.ErrMomentNotFound) {
+			return response.NewBizErrorWithMsg(response.NotFound, "手记不存在")
+		}
+		return err
+	}
+
+	resp := contract.MetricsResp{}
+	if metrics != nil {
+		resp.Views = metrics.Views
+		resp.Likes = metrics.Likes
+		resp.Comments = metrics.Comments
+	}
+
+	return response.Success(c, resp)
+}
+
 func (h *MomentHandler) toMomentResp(ctx context.Context, momentItem *content.Moment) (*contract.MomentResp, error) {
 	topics, err := h.svc.GetMomentTopics(ctx, momentItem.ID)
 	if err != nil {
@@ -731,6 +766,7 @@ func (h *MomentHandler) toMomentResp(ctx context.Context, momentItem *content.Mo
 		return nil, err
 	}
 
+	siteTZ := h.sysCfg.Timezone(ctx)
 	resp := contract.MomentResp{
 		ID:                         momentItem.ID,
 		Title:                      momentItem.Title,
@@ -753,7 +789,7 @@ func (h *MomentHandler) toMomentResp(ctx context.Context, momentItem *content.Mo
 		IsOriginal:                 momentItem.IsOriginal,
 		ExtInfo:                    jsonRawFromBytes(momentItem.ExtInfo),
 		ContentUpdatedAt:           momentItem.ContentUpdatedAt,
-		CreatedAt:                  momentItem.CreatedAt,
+		CreatedAt:                  momentItem.CreatedAt.In(siteTZ),
 		UpdatedAt:                  momentItem.UpdatedAt,
 	}
 
@@ -798,6 +834,7 @@ func (h *MomentHandler) toMomentListItemResp(ctx context.Context, momentItem *co
 		return nil, err
 	}
 
+	siteTZ := h.sysCfg.Timezone(ctx)
 	resp := contract.MomentListItemResp{
 		ID:               momentItem.ID,
 		Title:            momentItem.Title,
@@ -809,7 +846,7 @@ func (h *MomentHandler) toMomentListItemResp(ctx context.Context, momentItem *co
 		IsOriginal:       momentItem.IsOriginal,
 		IsPublished:      momentItem.IsPublished,
 		ContentUpdatedAt: momentItem.ContentUpdatedAt,
-		CreatedAt:        momentItem.CreatedAt,
+		CreatedAt:        momentItem.CreatedAt.In(siteTZ),
 		UpdatedAt:        momentItem.UpdatedAt,
 		Topics:           []string{},
 		Image:            splitImages(momentItem.Image),

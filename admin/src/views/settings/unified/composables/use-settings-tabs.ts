@@ -1,19 +1,17 @@
 import { ref, reactive, watch, type Component, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { showFederationBetaDialog } from '@/utils/federation-beta'
-import { isFederationEnabled } from '@/utils/federation-gate'
-
-import SiteInfoTab from '../components/tabs/SiteInfoTab.vue'
-import ThemeExtendTab from '../components/tabs/ThemeExtendTab.vue'
-import SecurityTab from '../components/tabs/SecurityTab.vue'
-import ContentTab from '../components/tabs/ContentTab.vue'
-import EmailTab from '../components/tabs/EmailTab.vue'
-import WebhookTab from '../components/tabs/WebhookTab.vue'
-import FederationTab from '../components/tabs/FederationTab.vue'
+import AdvancedTab from '../components/tabs/AdvancedTab.vue'
 import AiTab from '../components/tabs/AiTab.vue'
 import ApiTokensTab from '../components/tabs/ApiTokensTab.vue'
-import AdvancedTab from '../components/tabs/AdvancedTab.vue'
+import ContentTab from '../components/tabs/ContentTab.vue'
+import EmailTab from '../components/tabs/EmailTab.vue'
+import FederationTab from '../components/tabs/FederationTab.vue'
+import SecurityTab from '../components/tabs/SecurityTab.vue'
+import SiteInfoTab from '../components/tabs/SiteInfoTab.vue'
+import TelemetryTab from '../components/tabs/TelemetryTab.vue'
+import ThemeExtendTab from '../components/tabs/ThemeExtendTab.vue'
+import WebhookTab from '../components/tabs/WebhookTab.vue'
 
 export interface SettingsTab {
   key: string
@@ -25,15 +23,32 @@ export interface SettingsTab {
 }
 
 export const settingsTabs: SettingsTab[] = [
-  { key: 'site-info', label: '基本信息', icon: 'iconify ph--globe-hemisphere-west', component: SiteInfoTab },
-  { key: 'theme-extend', label: '主题扩展', icon: 'iconify ph--paint-brush', component: ThemeExtendTab, fillHeight: true },
-  { key: 'security', label: '安全与登录', icon: 'iconify ph--shield-check', component: SecurityTab },
+  {
+    key: 'site-info',
+    label: '基本信息',
+    icon: 'iconify ph--globe-hemisphere-west',
+    component: SiteInfoTab,
+  },
+  {
+    key: 'theme-extend',
+    label: '主题扩展',
+    icon: 'iconify ph--paint-brush',
+    component: ThemeExtendTab,
+    fillHeight: true,
+  },
+  {
+    key: 'security',
+    label: '安全与登录',
+    icon: 'iconify ph--shield-check',
+    component: SecurityTab,
+  },
   { key: 'content', label: '内容与评论', icon: 'iconify ph--article', component: ContentTab },
   { key: 'email', label: '邮件', icon: 'iconify ph--envelope', component: EmailTab },
   { key: 'webhook', label: 'Webhook', icon: 'iconify ph--webhooks-logo', component: WebhookTab },
-  { key: 'federation', label: '联合 Beta', icon: 'iconify ph--circles-three', component: FederationTab },
+  { key: 'federation', label: '联合', icon: 'iconify ph--circles-three', component: FederationTab },
   { key: 'ai', label: 'AI', icon: 'iconify ph--robot', component: AiTab },
   { key: 'api-tokens', label: 'API Tokens', icon: 'iconify ph--key', component: ApiTokensTab },
+  { key: 'telemetry', label: '遥测', icon: 'iconify ph--chart-line-up', component: TelemetryTab },
   { key: 'advanced', label: '高级', icon: 'iconify ph--gear', component: AdvancedTab },
 ]
 
@@ -59,16 +74,8 @@ export function useSettingsTabs() {
     }
   })
 
-  async function switchTab(tabKey: string) {
+  function switchTab(tabKey: string) {
     if (tabKey === activeTab.value) return
-
-    if (isFederationEnabled && tabKey === 'federation') {
-      const confirmed = await showFederationBetaDialog()
-      if (!confirmed) {
-        return
-      }
-    }
-
     activeTab.value = tabKey
   }
 

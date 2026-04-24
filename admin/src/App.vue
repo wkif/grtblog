@@ -15,7 +15,6 @@ import { provide, ref } from 'vue'
 import { RouterView } from 'vue-router'
 
 import Noise from '@/components/Noise.vue'
-import FederationBetaProvider from '@/components/FederationBetaProvider.vue'
 import { getConfigProviderProps } from '@/composables'
 import { usePreferencesStore } from '@/stores'
 
@@ -26,10 +25,10 @@ import type { LayoutSlideDirection } from './injection'
 const { watermark, noise } = storeToRefs(usePreferencesStore())
 
 import hljs from 'highlight.js/lib/core'
+import css from 'highlight.js/lib/languages/css'
 import javascript from 'highlight.js/lib/languages/javascript'
 import json from 'highlight.js/lib/languages/json'
 import xml from 'highlight.js/lib/languages/xml'
-import css from 'highlight.js/lib/languages/css'
 
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('json', json)
@@ -70,22 +69,23 @@ provide(layoutInjectionKey, {
 </script>
 
 <template>
-  <NConfigProvider v-bind="configProviderProps" :hljs="hljs">
+  <NConfigProvider
+    v-bind="configProviderProps"
+    :hljs="hljs"
+  >
     <NGlobalStyle />
     <NEl>
       <NModalProvider>
         <NNotificationProvider placement="top-right">
           <NMessageProvider>
             <NDialogProvider>
-              <FederationBetaProvider>
-                <RouterView />
-                <NWatermark
-                  v-if="watermark.show"
-                  fullscreen
-                  v-bind="watermark"
-                />
-                <Noise v-if="noise.show" />
-              </FederationBetaProvider>
+              <RouterView />
+              <NWatermark
+                v-if="watermark.show"
+                fullscreen
+                v-bind="watermark"
+              />
+              <Noise v-if="noise.show" />
             </NDialogProvider>
           </NMessageProvider>
         </NNotificationProvider>

@@ -20,6 +20,7 @@ import (
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/email"
 	appEvent "github.com/grtsinry43/grtblog-v2/server/internal/app/event"
 	appfed "github.com/grtsinry43/grtblog-v2/server/internal/app/federation"
+	"github.com/grtsinry43/grtblog-v2/server/internal/app/friendlink"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/health"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/htmlsnapshot"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/isr"
@@ -27,6 +28,7 @@ import (
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/observability"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/ownerstatus"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/sysconfig"
+	"github.com/grtsinry43/grtblog-v2/server/internal/app/telemetry"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/webhook"
 	"github.com/grtsinry43/grtblog-v2/server/internal/config"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/handler"
@@ -57,6 +59,8 @@ type Dependencies struct {
 	OwnerStatus   *ownerstatus.Service
 	HealthState   *health.State
 	HealthChecker *health.Checker
+	FedSync       *appfed.SyncWorker
+	Telemetry     *telemetry.Service
 }
 
 // Register wires up all HTTP endpoints with middlewares.
@@ -99,6 +103,11 @@ func Register(app *fiber.App, deps Dependencies) {
 	ws.RegisterGlobalNotificationSubscriber(eventBus, wsManager)
 	ws.RegisterHealthSubscriber(eventBus, wsManager)
 
+	// Late-inject wsManager into telemetry (created before router).
+	if deps.Telemetry != nil {
+		deps.Telemetry.SetWSManager(wsManager)
+	}
+
 	// Create health checker (will be started by server.Start).
 	if deps.HealthChecker == nil {
 		deps.HealthChecker = health.NewChecker(deps.HealthState, deps.DB, deps.Redis, sysCfgSvc, eventBus, 0, deps.Config.App.HTMLSnapshotBaseURL)
@@ -132,12 +141,15 @@ func Register(app *fiber.App, deps Dependencies) {
 	email.RegisterSubscribers(eventBus, emailDispatcher)
 
 	contentRepo := persistence.NewContentRepository(deps.DB)
+	albumRepo := persistence.NewAlbumRepository(deps.DB)
+	thinkingRepo := persistence.NewThinkingRepository(deps.DB)
 	ws.RegisterSiteActivitySubscriber(
 		eventBus,
 		wsManager,
 		contentRepo,
-		persistence.NewThinkingRepository(deps.DB),
+		thinkingRepo,
 		persistence.NewCommentRepository(deps.DB),
+		albumRepo,
 	)
 	htmlSnapshotSvc := deps.HTMLSnapshot
 	if htmlSnapshotSvc == nil {
@@ -146,13 +158,14 @@ func Register(app *fiber.App, deps Dependencies) {
 	deps.HTMLSnapshot = htmlSnapshotSvc
 	isrSvc := deps.ISR
 	if isrSvc == nil {
-		isrSvc = isr.NewService(deps.Redis, deps.Config.Redis.Prefix, htmlSnapshotSvc, contentRepo)
+		isrSvc = isr.NewService(deps.Redis, deps.Config.Redis.Prefix, htmlSnapshotSvc, contentRepo, albumRepo, thinkingRepo)
 	}
 	deps.ISR = isrSvc
 	isr.RegisterArticleSubscribers(eventBus, isrSvc)
 	isr.RegisterMomentSubscribers(eventBus, isrSvc)
 	isr.RegisterPageSubscribers(eventBus, isrSvc)
 	isr.RegisterThinkingSubscribers(eventBus, isrSvc)
+	isr.RegisterAlbumSubscribers(eventBus, isrSvc)
 	isr.RegisterFriendLinkSubscribers(eventBus, isrSvc)
 	isr.RegisterFriendTimelineSubscribers(eventBus, isrSvc)
 	isr.RegisterLayoutSubscribers(eventBus, isrSvc)
@@ -179,6 +192,7 @@ func Register(app *fiber.App, deps Dependencies) {
 		eventBus,
 	)
 	appfed.RegisterSubscribers(eventBus, fedDelivery)
+	friendlink.RegisterFederationSubscribers(eventBus, fedInstanceRepo, persistence.NewFriendLinkRepository(deps.DB), fedResolver, deps.FedSync)
 	adminNotifRepo := persistence.NewAdminNotificationRepository(deps.DB)
 	adminNotifSvc := adminnotification.NewService(adminNotifRepo, eventBus)
 	adminnotification.RegisterSubscribers(eventBus, adminNotifSvc, contentRepo, persistence.NewIdentityRepository(deps.DB))
@@ -213,6 +227,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	registerWSRoutes(v2, wsManager, deps)
 	registerArticlePublicRoutes(v2, deps)
 	registerMomentPublicRoutes(v2, deps)
+	registerAlbumPublicRoutes(v2, deps)
 	registerThinkingPublicRoutes(v2, deps)
 	registerPagePublicRoutes(v2, deps)
 	registerTaxonomyPublicRoutes(v2, deps)
@@ -220,6 +235,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	registerUserRoutes(v2, deps, websiteInfoHandler)
 	registerArticleAuthRoutes(v2, deps)
 	registerMomentAuthRoutes(v2, deps)
+	registerAlbumAuthRoutes(v2, deps)
 	registerThinkingAuthRoutes(v2, deps)
 	registerPageAuthRoutes(v2, deps)
 	registerCommentAuthRoutes(v2, deps)

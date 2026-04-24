@@ -1,6 +1,8 @@
 import { NFormItem, NInput, NInputNumber, NSelect, NSwitch, NTag } from 'naive-ui'
 import { defineComponent, type PropType } from 'vue'
 
+import ImageInput from '@/components/image-picker/ImageInput.vue'
+
 import type { SysConfigItem } from '@/services/sysconfig'
 
 export default defineComponent({
@@ -32,7 +34,14 @@ export default defineComponent({
               敏感
             </NTag>
           )}
-           <NTag size="small" type="default" bordered={false} class="scale-90 opacity-50">{item.valueType}</NTag>
+          <NTag
+            size='small'
+            type='default'
+            bordered={false}
+            class='scale-90 opacity-50'
+          >
+            {item.valueType}
+          </NTag>
         </div>
       )
 
@@ -77,18 +86,40 @@ export default defineComponent({
           )
           break
         case 'string':
-        default:
-          const inputType = (item.meta as any)?.inputType === 'password' ? 'password' : 'text'
-          control = (
-            <NInput
-              v-model:value={valueMap[item.key]}
-              type={inputType}
-              clearable
-              showPasswordOn='click'
-              placeholder={item.isSensitive ? '********** (留空不更新)' : ''}
-            />
-          )
+        default: {
+          const metaInputType = (item.meta as any)?.inputType
+          if (metaInputType === 'image') {
+            control = (
+              <ImageInput
+                value={valueMap[item.key] || null}
+                onUpdate:value={(v: string | null) => {
+                  valueMap[item.key] = v ?? ''
+                }}
+              />
+            )
+          } else if (metaInputType === 'textarea') {
+            control = (
+              <NInput
+                v-model:value={valueMap[item.key]}
+                type='textarea'
+                autosize={{ minRows: 2, maxRows: 10 }}
+                placeholder={item.isSensitive ? '********** (留空不更新)' : ''}
+              />
+            )
+          } else {
+            const inputType = metaInputType === 'password' ? 'password' : 'text'
+            control = (
+              <NInput
+                v-model:value={valueMap[item.key]}
+                type={inputType}
+                clearable
+                showPasswordOn='click'
+                placeholder={item.isSensitive ? '********** (留空不更新)' : ''}
+              />
+            )
+          }
           break
+        }
       }
 
       // 4. 组装 FormItem (使用 Slots)

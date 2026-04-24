@@ -54,6 +54,7 @@ export interface SetupStateResponse {
   websiteInfoReady: boolean
   missingWebsiteInfoKeys: string[]
   needsSetup: boolean
+  pendingUpgradeGuides: string[]
 }
 
 /** Legacy API: only "at least one user exists" — used when `/auth/setup-state` is missing (older server). */
