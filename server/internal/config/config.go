@@ -15,18 +15,19 @@ type Config struct {
 	Turnstile TurnstileConfig
 	Redis     RedisConfig
 	GeoIP     GeoIPConfig
+	Storage   StorageConfig
 }
 
 // AppConfig contains Fiber specific settings.
 type AppConfig struct {
-	Name                string
-	Port                string
-	Env                 string
-	HTMLSnapshotBaseURL string
-	ProxyHeader         string
-	TrustedProxies      []string
-	TrustedProxyCheck   bool
-	IPValidation        bool
+	Name                     string
+	Port                     string
+	Env                      string
+	HTMLSnapshotBaseURL      string
+	ProxyHeader              string
+	TrustedProxies           []string
+	TrustedProxyCheck        bool
+	IPValidation             bool
 	UpdateCheckEnabled       bool
 	UpdateCheckRepo          string
 	UpdateCheckChannel       string
@@ -72,6 +73,29 @@ type GeoIPConfig struct {
 	ASNURL      string
 }
 
+// StorageConfig 描述上传文件的存储后端。
+type StorageConfig struct {
+	Provider  string
+	UploadDir string
+	CacheDir  string
+	ImageDir  string
+	VideoDir  string
+	FileDir   string
+	OSS       OSSConfig
+}
+
+// OSSConfig 描述阿里云 OSS 配置。
+type OSSConfig struct {
+	Region          string
+	Endpoint        string
+	Bucket          string
+	Prefix          string
+	PublicBaseURL   string
+	AccessKeyID     string
+	AccessKeySecret string
+	SecurityToken   string
+}
+
 // Load builds a Config struct with sane defaults overridden by environment variables.
 func Load() Config {
 	return Config{
@@ -89,10 +113,10 @@ func Load() Config {
 				"192.168.0.0/16",
 				"fc00::/7",
 			}),
-			TrustedProxyCheck:  getEnvAsBool("APP_TRUSTED_PROXY_CHECK", true),
-			IPValidation:       getEnvAsBool("APP_IP_VALIDATION", true),
-			UpdateCheckEnabled: getEnvAsBool("APP_UPDATE_CHECK_ENABLED", true),
-			UpdateCheckRepo:    strings.TrimSpace(getEnv("APP_UPDATE_CHECK_REPO", "grtsinry43/grtblog-v2")),
+			TrustedProxyCheck:        getEnvAsBool("APP_TRUSTED_PROXY_CHECK", true),
+			IPValidation:             getEnvAsBool("APP_IP_VALIDATION", true),
+			UpdateCheckEnabled:       getEnvAsBool("APP_UPDATE_CHECK_ENABLED", true),
+			UpdateCheckRepo:          strings.TrimSpace(getEnv("APP_UPDATE_CHECK_REPO", "grtsinry43/grtblog-v2")),
 			UpdateCheckChannel:       strings.TrimSpace(getEnv("APP_UPDATE_CHANNEL", "stable")),
 			TelemetryDefaultEndpoint: strings.TrimSpace(getEnv("TELEMETRY_DEFAULT_ENDPOINT", "")),
 		},
@@ -124,6 +148,24 @@ func Load() Config {
 			DownloadURL: getEnv("GEOIP_DB_URL", "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb"),
 			ASNPath:     getEnv("GEOIP_ASN_DB_PATH", "storage/geoip/GeoLite2-ASN.mmdb"),
 			ASNURL:      getEnv("GEOIP_ASN_DB_URL", "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"),
+		},
+		Storage: StorageConfig{
+			Provider:  strings.ToLower(strings.TrimSpace(getEnv("STORAGE_PROVIDER", "local"))),
+			UploadDir: getEnv("UPLOAD_DIR", "storage/uploads"),
+			CacheDir:  strings.Trim(strings.TrimSpace(getEnv("UPLOAD_CACHE_DIR", "blog/cache")), "/"),
+			ImageDir:  strings.Trim(strings.TrimSpace(getEnv("UPLOAD_IMAGE_DIR", "blog/images")), "/"),
+			VideoDir:  strings.Trim(strings.TrimSpace(getEnv("UPLOAD_VIDEO_DIR", "blog/video")), "/"),
+			FileDir:   strings.Trim(strings.TrimSpace(getEnv("UPLOAD_FILE_DIR", "blog/files")), "/"),
+			OSS: OSSConfig{
+				Region:          strings.TrimSpace(getEnv("OSS_REGION", "")),
+				Endpoint:        strings.TrimSpace(getEnv("OSS_ENDPOINT", "")),
+				Bucket:          strings.TrimSpace(getEnv("OSS_BUCKET", "")),
+				Prefix:          strings.Trim(strings.TrimSpace(getEnv("OSS_PREFIX", "")), "/"),
+				PublicBaseURL:   strings.TrimRight(strings.TrimSpace(getEnv("OSS_PUBLIC_BASE_URL", "")), "/"),
+				AccessKeyID:     strings.TrimSpace(getEnv("OSS_ACCESS_KEY_ID", "")),
+				AccessKeySecret: strings.TrimSpace(getEnv("OSS_ACCESS_KEY_SECRET", "")),
+				SecurityToken:   strings.TrimSpace(getEnv("OSS_SECURITY_TOKEN", "")),
+			},
 		},
 	}
 }

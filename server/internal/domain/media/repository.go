@@ -6,6 +6,7 @@ import "context"
 type Repository interface {
 	FindByHash(ctx context.Context, hash string) (*UploadFile, error)
 	FindByID(ctx context.Context, id int64) (*UploadFile, error)
+	FindByPath(ctx context.Context, path string) (*UploadFile, error)
 	Create(ctx context.Context, file *UploadFile) error
 	Update(ctx context.Context, file *UploadFile) error
 	UpdatePath(ctx context.Context, id int64, path string) error

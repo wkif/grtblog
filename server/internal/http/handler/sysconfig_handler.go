@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	mediaapp "github.com/grtsinry43/grtblog-v2/server/internal/app/media"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/sysconfig"
 	domainconfig "github.com/grtsinry43/grtblog-v2/server/internal/domain/config"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/contract"
@@ -117,6 +118,66 @@ func (h *SysConfigHandler) UpdateSysConfig(c *fiber.Ctx) error {
 		return response.NewBizErrorWithCause(response.ServerError, "配置解析失败", err)
 	}
 	return response.SuccessWithMessage(c, tree, "更新成功")
+}
+
+// TestStorageConnection godoc
+// @Summary 测试资源存储连接
+// @Tags SysConfig
+// @Accept json
+// @Produce json
+// @Param request body contract.SysConfigBatchUpdateReq false "临时覆盖的配置项"
+// @Success 200 {object} any
+// @Security BearerAuth
+// @Router /admin/sysconfig/storage/test [post]
+// @Security JWTAuth
+func (h *SysConfigHandler) TestStorageConnection(c *fiber.Ctx) error {
+	var req contract.SysConfigBatchUpdateReq
+	if len(bytes.TrimSpace(c.Body())) > 0 {
+		if err := c.BodyParser(&req); err != nil {
+			return response.NewBizErrorWithCause(response.ParamsError, "请求体解析失败", err)
+		}
+	}
+
+	updates := make([]sysconfig.UpdateItem, 0, len(req.Items))
+	for _, item := range req.Items {
+		key := strings.TrimSpace(item.Key)
+		if key == "" {
+			continue
+		}
+		updates = append(updates, sysconfig.UpdateItem{
+			Key:          key,
+			Value:        contract.RawMessagePtr(item.Value),
+			IsSensitive:  item.IsSensitive,
+			GroupPath:    item.GroupPath,
+			Label:        item.Label,
+			Description:  item.Description,
+			ValueType:    item.ValueType,
+			EnumOptions:  contract.RawMessagePtr(item.EnumOptions),
+			DefaultValue: contract.RawMessagePtr(item.DefaultValue),
+			VisibleWhen:  contract.RawMessagePtr(item.VisibleWhen),
+			Sort:         item.Sort,
+			Meta:         contract.RawMessagePtr(item.Meta),
+		})
+	}
+
+	settings, err := h.svc.StorageSettingsWithOverrides(c.Context(), updates)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ParamsError, "存储配置无效", err)
+	}
+	if strings.TrimSpace(settings.Provider) != "aliyun_oss" {
+		return response.NewBizErrorWithMsg(response.ParamsError, "当前默认存储后端不是阿里云 OSS")
+	}
+	if err := mediaapp.TestAliyunOSSConnection(c.Context(), settings.OSS); err != nil {
+		return response.NewBizErrorWithCause(response.ParamsError, "OSS 连接测试失败", err)
+	}
+
+	return response.SuccessWithMessage(c, fiber.Map{
+		"provider":      settings.Provider,
+		"bucket":        settings.OSS.Bucket,
+		"endpoint":      settings.OSS.Endpoint,
+		"publicBaseURL": settings.OSS.PublicBaseURL,
+		"prefix":        settings.OSS.Prefix,
+	}, "OSS 连接测试成功")
 }
 
 type sysConfigGroupNode struct {

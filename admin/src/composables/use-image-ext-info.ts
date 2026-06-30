@@ -6,7 +6,12 @@ const MARKDOWN_IMAGE_REGEX = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const HTML_IMAGE_REGEX = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi
 
 function normalizeUrl(value: string) {
-  return value.trim().replace(/^<|>$/g, '')
+  let next = value.trim()
+  for (;;) {
+    const normalized = next.replace(/^<|>$/g, '').replace(/^[`'"]+|[`'"]+$/g, '').trim()
+    if (normalized === next) return normalized
+    next = normalized
+  }
 }
 
 function extractImageUrlsFromMarkdown(markdown: string) {

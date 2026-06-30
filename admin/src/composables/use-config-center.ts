@@ -131,6 +131,10 @@ export function useConfigCenter(listFn: ConfigListFn, updateFn: ConfigUpdateFn) 
     return updates
   }
 
+  function getValue(key: string) {
+    return valueMap[key]
+  }
+
   // --- 业务逻辑：可见性判断 ---
   function isItemVisible(item: SysConfigItem): boolean {
     if (!Array.isArray(item.visibleWhen) || item.visibleWhen.length === 0) return true
@@ -201,6 +205,8 @@ export function useConfigCenter(listFn: ConfigListFn, updateFn: ConfigUpdateFn) 
     jsonBufferMap,
     expandedGroups,
     isItemVisible, // 暴露给组件使用
+    buildUpdateItems,
+    getValue,
     fetch,
     save,
     // 导出用于脏检查的计算属性

@@ -19,16 +19,18 @@ import (
 type Service struct {
 	repo             domainconfig.SysConfigRepository
 	defaultTurnstile config.TurnstileConfig
+	defaultStorage   config.StorageConfig
 	events           appEvent.Bus
 }
 
-func NewService(repo domainconfig.SysConfigRepository, defaults config.TurnstileConfig, events appEvent.Bus) *Service {
+func NewService(repo domainconfig.SysConfigRepository, turnstileDefaults config.TurnstileConfig, storageDefaults config.StorageConfig, events appEvent.Bus) *Service {
 	if events == nil {
 		events = appEvent.NopBus{}
 	}
 	return &Service{
 		repo:             repo,
-		defaultTurnstile: defaults,
+		defaultTurnstile: turnstileDefaults,
+		defaultStorage:   storageDefaults,
 		events:           events,
 	}
 }
@@ -527,7 +529,11 @@ func (e *UpdateValidationError) Error() string {
 }
 
 func (s *Service) ListConfigs(ctx context.Context, keys []string) ([]domainconfig.SysConfig, error) {
-	return s.repo.List(ctx, keys)
+	items, err := s.repo.List(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
+	return s.mergeBuiltinConfigs(items, keys), nil
 }
 
 func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]domainconfig.SysConfig, error) {
@@ -564,12 +570,30 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 		}
 		current, exists := existingMap[key]
 		next := current
-		if !exists {
+		presetExists := false
+		if preset, ok := s.builtinConfigByKey(key); ok {
+			if exists {
+				next = applyBuiltinSchema(current, preset)
+				presetExists = true
+			} else {
+				next = preset
+				presetExists = true
+			}
+		} else if !exists {
 			next = domainconfig.SysConfig{Key: key}
 		}
 		changed := false
 
-		targetValueType := normalizeValueType(current.ValueType)
+		targetValueType := ""
+		if presetExists {
+			targetValueType = normalizeValueType(next.ValueType)
+		}
+		if targetValueType == "" {
+			targetValueType = normalizeValueType(current.ValueType)
+		}
+		if targetValueType == "" {
+			targetValueType = normalizeValueType(next.ValueType)
+		}
 		if targetValueType == "" {
 			targetValueType = valueTypeString
 		}
@@ -592,7 +616,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 				Message: "valueType 无效",
 				Cause:   err,
 			}
-		} else if !exists {
+		} else if !exists && !presetExists {
 			next.ValueType = targetValueType
 		}
 
@@ -613,7 +637,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 				next.GroupPath = groupPath
 				changed = true
 			}
-		} else if !exists {
+		} else if !exists && !presetExists {
 			next.GroupPath = ""
 		}
 
@@ -622,7 +646,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 				next.Label = *item.Label
 				changed = true
 			}
-		} else if !exists {
+		} else if !exists && !presetExists {
 			next.Label = ""
 		}
 
@@ -631,7 +655,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 				next.Description = *item.Description
 				changed = true
 			}
-		} else if !exists {
+		} else if !exists && !presetExists {
 			next.Description = ""
 		}
 
@@ -656,7 +680,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 			enumValues = values
 			next.EnumOptions = enumOptions
 			changed = true
-		} else if !exists {
+		} else if !exists && !presetExists {
 			enumOptions = emptyJSONArray
 			next.EnumOptions = enumOptions
 		} else {
@@ -689,7 +713,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 			}
 			next.VisibleWhen = normalized
 			changed = true
-		} else if !exists {
+		} else if !exists && !presetExists {
 			next.VisibleWhen = emptyJSONArray
 		} else if len(next.VisibleWhen) == 0 {
 			next.VisibleWhen = emptyJSONArray
@@ -706,7 +730,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 			}
 			next.Meta = normalized
 			changed = true
-		} else if !exists {
+		} else if !exists && !presetExists {
 			next.Meta = emptyJSONObject
 		} else if len(next.Meta) == 0 {
 			next.Meta = emptyJSONObject
@@ -723,7 +747,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 			}
 			next.DefaultValue = parsed
 			changed = true
-		} else if !exists {
+		} else if !exists && !presetExists {
 			next.DefaultValue = nil
 		}
 
@@ -732,7 +756,7 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 				next.Sort = *item.Sort
 				changed = true
 			}
-		} else if !exists {
+		} else if !exists && !presetExists {
 			next.Sort = 0
 		}
 
@@ -835,7 +859,11 @@ func (s *Service) UpdateConfigs(ctx context.Context, items []UpdateItem) ([]doma
 		// Auto-generate keypairs when federation/activitypub is enabled
 		s.ensureKeyPairs(ctx, updatedKeys)
 	}
-	return s.repo.List(ctx, nil)
+	updatedConfigs, err := s.repo.List(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	return s.mergeBuiltinConfigs(updatedConfigs, nil), nil
 }
 
 func (s *Service) validateCustomValue(key string, valueType string, value string) error {
@@ -845,6 +873,39 @@ func (s *Service) validateCustomValue(key string, valueType string, value string
 		}
 		if err := validateActivityPubPublishTemplate(value); err != nil {
 			return err
+		}
+	}
+	switch key {
+	case uploadCacheDirKey, uploadImageDirKey, uploadVideoDirKey, uploadFileDirKey:
+		if valueType != valueTypeString {
+			return fmt.Errorf("must be string type")
+		}
+		if normalized := normalizeUploadManagedDir(value, ""); normalized == "" {
+			return fmt.Errorf("directory cannot be empty")
+		} else if strings.Contains(normalized, "..") {
+			return fmt.Errorf("directory cannot contain ..")
+		}
+	case storageProviderKey:
+		if valueType != valueTypeEnum {
+			return fmt.Errorf("must be enum type")
+		}
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "local", "aliyun_oss":
+			return nil
+		default:
+			return fmt.Errorf("unsupported storage provider")
+		}
+	case storageOSSPrefixKey:
+		if valueType != valueTypeString {
+			return fmt.Errorf("must be string type")
+		}
+		normalized := strings.Trim(strings.TrimSpace(value), "/")
+		if strings.Contains(normalized, "..") {
+			return fmt.Errorf("prefix cannot contain ..")
+		}
+	case storageOSSRegionKey, storageOSSEndpointKey, storageOSSBucketKey, storageOSSPublicBaseURLKey, storageOSSAccessKeyIDKey, storageOSSAccessKeySecretKey, storageOSSSecurityTokenKey:
+		if valueType != valueTypeString {
+			return fmt.Errorf("must be string type")
 		}
 	}
 	return nil

@@ -190,6 +190,8 @@ export default defineComponent({
       expandedGroups,
       pendingCount,
       isItemVisible,
+      buildUpdateItems,
+      getValue,
       fetch,
       save,
     } = useConfigCenter(wrappedListFn, wrappedUpdateFn)
@@ -202,7 +204,13 @@ export default defineComponent({
       { immediate: true },
     )
 
-    expose({ save, fetch, pendingCount })
+    expose({
+      save,
+      fetch,
+      pendingCount,
+      getPendingItems: buildUpdateItems,
+      getValue,
+    })
 
     const renderGroups = (
       groups: SysConfigGroup[] | undefined,

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 
@@ -28,7 +27,7 @@ func NewUploadHandler(svc *mediaapp.Service) *UploadHandler {
 // @Accept multipart/form-data
 // @Produce json
 // @Param file formData file true "文件"
-// @Param type formData string true "上传类型: picture|file"
+// @Param type formData string true "上传类型: picture|file|video|cache"
 // @Success 200 {object} contract.UploadFileRespEnvelope
 // @Security BearerAuth
 // @Router /upload [post]
@@ -45,7 +44,7 @@ func (h *UploadHandler) UploadFile(c *fiber.Ctx) error {
 	result, err := h.svc.Upload(c.Context(), file, fileType)
 	if err != nil {
 		if errors.Is(err, media.ErrInvalidUploadType) {
-			return response.NewBizErrorWithMsg(response.ParamsError, "type 仅支持 picture 或 file")
+			return response.NewBizErrorWithMsg(response.ParamsError, "type 仅支持 picture、file、video 或 cache")
 		}
 		return response.NewBizErrorWithCause(response.ServerError, "文件上传失败", err)
 	}
@@ -58,7 +57,7 @@ func (h *UploadHandler) UploadFile(c *fiber.Ctx) error {
 			DominantColor: result.ImageMeta.DominantColor,
 		}
 	}
-	resp := contract.ToUploadFileResp(result.File, !result.Created, result.ThumbnailURL, imgMeta)
+	resp := contract.ToUploadFileResp(result.File, h.svc.PublicURL(result.File.Path), !result.Created, result.ThumbnailURL, imgMeta)
 	msg := "上传成功"
 	if !result.Created {
 		msg = "文件已存在，返回已上传结果"
@@ -92,8 +91,9 @@ func (h *UploadHandler) ListUploads(c *fiber.Ctx) error {
 
 	items := make([]contract.UploadFileResp, len(result.Items))
 	for i, file := range result.Items {
-		thumbURL := h.svc.ThumbnailURLFor("/uploads" + file.Path)
-		items[i] = contract.ToUploadFileResp(file, false, thumbURL, nil)
+		publicURL := h.svc.PublicURL(file.Path)
+		thumbURL := h.svc.ThumbnailURLFor(publicURL)
+		items[i] = contract.ToUploadFileResp(file, publicURL, false, thumbURL, nil)
 	}
 
 	resp := contract.UploadFileListResp{
@@ -161,8 +161,9 @@ func (h *UploadHandler) RenameUpload(c *fiber.Ctx) error {
 		return response.NewBizErrorWithCause(response.ParamsError, "文件重命名失败", err)
 	}
 
-	thumbURL := h.svc.ThumbnailURLFor("/uploads" + updated.Path)
-	return response.SuccessWithMessage(c, contract.ToUploadFileResp(*updated, false, thumbURL, nil), "文件名已更新")
+	publicURL := h.svc.PublicURL(updated.Path)
+	thumbURL := h.svc.ThumbnailURLFor(publicURL)
+	return response.SuccessWithMessage(c, contract.ToUploadFileResp(*updated, publicURL, false, thumbURL, nil), "文件名已更新")
 }
 
 // DeleteUpload godoc
@@ -212,16 +213,12 @@ func (h *UploadHandler) DownloadUpload(c *fiber.Ctx) error {
 		return response.NewBizErrorWithCause(response.ServerError, "获取文件失败", err)
 	}
 
-	diskPath, err := h.svc.ResolveDiskPath(file.Path)
+	stream, err := h.svc.OpenStoredFile(c.Context(), file.Path)
 	if err != nil {
-		return response.NewBizErrorWithCause(response.ServerError, "文件路径解析失败", err)
-	}
-	if _, err := os.Stat(diskPath); err != nil {
-		if os.IsNotExist(err) {
-			return response.NewBizErrorWithMsg(response.NotFound, "文件不存在")
-		}
 		return response.NewBizErrorWithCause(response.ServerError, "读取文件失败", err)
 	}
-
-	return c.Download(diskPath, file.Name)
+	defer stream.Close()
+	c.Attachment(file.Name)
+	c.Type("application/octet-stream")
+	return c.SendStream(stream, int(file.Size))
 }

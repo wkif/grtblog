@@ -16,6 +16,7 @@ import (
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/identity"
 
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/article"
+	mediaapp "github.com/grtsinry43/grtblog-v2/server/internal/app/media"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/contract"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/middleware"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/response"
@@ -30,15 +31,17 @@ type ArticleHandler struct {
 	deliveryRepo  domainfed.OutboundDeliveryRepository
 	postCacheRepo domainfed.FederatedPostCacheRepository
 	instanceRepo  domainfed.FederationInstanceRepository
+	mediaSvc      *mediaapp.Service
 }
 
-func NewArticleHandler(svc *article.Service, contentRepo content.Repository, commentRepo domaincomment.CommentRepository, userRepo identity.Repository, apCfgSvc *sysconfig.Service, opts ...ArticleHandlerOption) *ArticleHandler {
+func NewArticleHandler(svc *article.Service, contentRepo content.Repository, commentRepo domaincomment.CommentRepository, userRepo identity.Repository, apCfgSvc *sysconfig.Service, mediaSvc *mediaapp.Service, opts ...ArticleHandlerOption) *ArticleHandler {
 	h := &ArticleHandler{
 		svc:         svc,
 		contentRepo: contentRepo,
 		commentRepo: commentRepo,
 		userRepo:    userRepo,
 		apCfgSvc:    apCfgSvc,
+		mediaSvc:    mediaSvc,
 	}
 	for _, o := range opts {
 		o(h)
@@ -84,6 +87,18 @@ func (h *ArticleHandler) CreateArticle(c *fiber.Ctx) error {
 	extInfo, err := parseExtInfo(req.ExtInfo)
 	if err != nil {
 		return response.NewBizErrorWithCause(response.ParamsError, "extInfo格式错误", err)
+	}
+	req.Content, err = finalizeDraftText(c.Context(), h.mediaSvc, req.Content)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "正文资源处理失败", err)
+	}
+	req.Cover, err = finalizeDraftOptionalURL(c.Context(), h.mediaSvc, req.Cover)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "封面资源处理失败", err)
+	}
+	extInfo, err = finalizeDraftExtInfo(c.Context(), h.mediaSvc, extInfo)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "扩展资源处理失败", err)
 	}
 
 	var cmd article.CreateArticleCmd
@@ -153,6 +168,18 @@ func (h *ArticleHandler) UpdateArticle(c *fiber.Ctx) error {
 	extInfo, err := parseExtInfo(req.ExtInfo)
 	if err != nil {
 		return response.NewBizErrorWithCause(response.ParamsError, "extInfo格式错误", err)
+	}
+	req.Content, err = finalizeDraftText(c.Context(), h.mediaSvc, req.Content)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "正文资源处理失败", err)
+	}
+	req.Cover, err = finalizeDraftOptionalURL(c.Context(), h.mediaSvc, req.Cover)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "封面资源处理失败", err)
+	}
+	extInfo, err = finalizeDraftExtInfo(c.Context(), h.mediaSvc, extInfo)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "扩展资源处理失败", err)
 	}
 
 	var cmd article.UpdateArticleCmd

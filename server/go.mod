@@ -24,6 +24,7 @@ require (
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
+	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.5.2 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -36,6 +37,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/image v0.38.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/time v0.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

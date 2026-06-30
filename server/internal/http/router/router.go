@@ -87,7 +87,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	sysCfgSvc := deps.SysConfig
 	if sysCfgSvc == nil {
 		sysCfgRepo := persistence.NewSysConfigRepository(deps.DB)
-		sysCfgSvc = sysconfig.NewService(sysCfgRepo, deps.Config.Turnstile, eventBus)
+		sysCfgSvc = sysconfig.NewService(sysCfgRepo, deps.Config.Turnstile, deps.Config.Storage, eventBus)
 	}
 	deps.SysConfig = sysCfgSvc
 	wsManager := ws.NewManager(ws.Config{

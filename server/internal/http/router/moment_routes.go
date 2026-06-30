@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/gofiber/fiber/v2"
 
+	mediaapp "github.com/grtsinry43/grtblog-v2/server/internal/app/media"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/moment"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/handler"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/middleware"
@@ -18,7 +19,7 @@ func registerMomentPublicRoutes(v2 fiber.Router, deps Dependencies) {
 	publicGroup.Get("/:id/same-period-articles", momentHandler.ListSamePeriodArticles)
 	publicGroup.Get("/short/:shortUrl", momentHandler.GetMomentByShortURL) // GET /api/v2/moments/short/abc123
 	publicGroup.Post("/:id/latest", momentHandler.CheckMomentLatest)       // POST /api/v2/moments/123/latest
-	publicGroup.Get("/:id/metrics", momentHandler.GetMomentMetrics)       // GET /api/v2/moments/123/metrics
+	publicGroup.Get("/:id/metrics", momentHandler.GetMomentMetrics)        // GET /api/v2/moments/123/metrics
 
 	v2.Get("/columns/short/:shortUrl/moments", momentHandler.ListMomentsByColumnShortURL)
 }
@@ -45,6 +46,8 @@ func newMomentHandler(deps Dependencies) *handler.MomentHandler {
 	contentRepo := persistence.NewContentRepository(deps.DB)
 	commentRepo := persistence.NewCommentRepository(deps.DB)
 	identityRepo := persistence.NewIdentityRepository(deps.DB)
+	uploadRepo := persistence.NewUploadFileRepository(deps.DB)
 	momentSvc := moment.NewService(contentRepo, commentRepo, deps.EventBus)
-	return handler.NewMomentHandler(momentSvc, contentRepo, commentRepo, identityRepo, deps.SysConfig)
+	mediaSvc := mediaapp.NewService(uploadRepo, deps.Config.Storage, deps.SysConfig, deps.EventBus)
+	return handler.NewMomentHandler(momentSvc, contentRepo, commentRepo, identityRepo, deps.SysConfig, mediaSvc)
 }

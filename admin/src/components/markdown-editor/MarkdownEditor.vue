@@ -87,7 +87,7 @@ const { view, onViewUpdate } = useCodeMirror(editorRef, {
   onComponentEdit: (payload) => inserter.open(payload),
   onUploadImage: async (file) => {
     try {
-      const result = await uploadFile(file, 'picture')
+      const result = await uploadFile(file, 'cache')
       return result.publicUrl
     } catch (error) {
       console.error(error)

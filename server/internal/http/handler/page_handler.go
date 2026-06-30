@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	mediaapp "github.com/grtsinry43/grtblog-v2/server/internal/app/media"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/page"
 	domaincomment "github.com/grtsinry43/grtblog-v2/server/internal/domain/comment"
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/content"
@@ -17,12 +18,14 @@ import (
 type PageHandler struct {
 	svc         *page.Service
 	commentRepo domaincomment.CommentRepository
+	mediaSvc    *mediaapp.Service
 }
 
-func NewPageHandler(svc *page.Service, commentRepo domaincomment.CommentRepository) *PageHandler {
+func NewPageHandler(svc *page.Service, commentRepo domaincomment.CommentRepository, mediaSvc *mediaapp.Service) *PageHandler {
 	return &PageHandler{
 		svc:         svc,
 		commentRepo: commentRepo,
+		mediaSvc:    mediaSvc,
 	}
 }
 
@@ -52,6 +55,14 @@ func (h *PageHandler) CreatePage(c *fiber.Ctx) error {
 	extInfo, err := parseExtInfo(req.ExtInfo)
 	if err != nil {
 		return response.NewBizErrorWithCause(response.ParamsError, "extInfo格式错误", err)
+	}
+	req.Content, err = finalizeDraftText(c.Context(), h.mediaSvc, req.Content)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "正文资源处理失败", err)
+	}
+	extInfo, err = finalizeDraftExtInfo(c.Context(), h.mediaSvc, extInfo)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "扩展资源处理失败", err)
 	}
 
 	cmd := page.CreatePageCmd{
@@ -123,6 +134,14 @@ func (h *PageHandler) UpdatePage(c *fiber.Ctx) error {
 	extInfo, err := parseExtInfo(req.ExtInfo)
 	if err != nil {
 		return response.NewBizErrorWithCause(response.ParamsError, "extInfo格式错误", err)
+	}
+	req.Content, err = finalizeDraftText(c.Context(), h.mediaSvc, req.Content)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "正文资源处理失败", err)
+	}
+	extInfo, err = finalizeDraftExtInfo(c.Context(), h.mediaSvc, extInfo)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "扩展资源处理失败", err)
 	}
 
 	cmd := page.UpdatePageCmd{

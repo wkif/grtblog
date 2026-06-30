@@ -16,6 +16,8 @@ const emit = defineEmits<{ 'dirty-change': [dirty: boolean] }>()
       'security/turnstile',
       'interaction/comment',
       'storage/upload',
+      'storage/provider',
+      'storage/oss',
       'notification/email',
       'webhook',
       'site',

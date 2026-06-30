@@ -9,6 +9,7 @@ import EmailTab from '../components/tabs/EmailTab.vue'
 import FederationTab from '../components/tabs/FederationTab.vue'
 import SecurityTab from '../components/tabs/SecurityTab.vue'
 import SiteInfoTab from '../components/tabs/SiteInfoTab.vue'
+import StorageTab from '../components/tabs/StorageTab.vue'
 import TelemetryTab from '../components/tabs/TelemetryTab.vue'
 import ThemeExtendTab from '../components/tabs/ThemeExtendTab.vue'
 import WebhookTab from '../components/tabs/WebhookTab.vue'
@@ -43,6 +44,7 @@ export const settingsTabs: SettingsTab[] = [
     component: SecurityTab,
   },
   { key: 'content', label: '内容与评论', icon: 'iconify ph--article', component: ContentTab },
+  { key: 'storage', label: '资源存储', icon: 'iconify ph--hard-drives', component: StorageTab },
   { key: 'email', label: '邮件', icon: 'iconify ph--envelope', component: EmailTab },
   { key: 'webhook', label: 'Webhook', icon: 'iconify ph--webhooks-logo', component: WebhookTab },
   { key: 'federation', label: '联合', icon: 'iconify ph--circles-three', component: FederationTab },

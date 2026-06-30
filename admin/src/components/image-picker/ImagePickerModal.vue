@@ -59,7 +59,7 @@ async function handleUpload({ file }: { file: UploadFileInfo }) {
   if (!file.file) return
   uploading.value = true
   try {
-    const res = await uploadFile(file.file, 'picture')
+    const res = await uploadFile(file.file, 'cache')
     message.success('上传成功')
     await fetchList()
     selectedUrl.value = res.publicUrl

@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/gofiber/fiber/v2"
 
+	mediaapp "github.com/grtsinry43/grtblog-v2/server/internal/app/media"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/page"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/handler"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/middleware"
@@ -17,7 +18,7 @@ func registerPagePublicRoutes(v2 fiber.Router, deps Dependencies) {
 	publicGroup.Get("/:id", pageHandler.GetPage)                       // GET /api/v2/pages/123
 	publicGroup.Get("/short/:shortUrl", pageHandler.GetPageByShortURL) // GET /api/v2/pages/short/abc123
 	publicGroup.Post("/:id/latest", pageHandler.CheckPageLatest)       // POST /api/v2/pages/123/latest
-	publicGroup.Get("/:id/metrics", pageHandler.GetPageMetrics)       // GET /api/v2/pages/123/metrics
+	publicGroup.Get("/:id/metrics", pageHandler.GetPageMetrics)        // GET /api/v2/pages/123/metrics
 }
 
 func registerPageAuthRoutes(v2 fiber.Router, deps Dependencies) {
@@ -39,6 +40,8 @@ func registerPageAuthRoutes(v2 fiber.Router, deps Dependencies) {
 func newPageHandler(deps Dependencies) *handler.PageHandler {
 	contentRepo := persistence.NewContentRepository(deps.DB)
 	commentRepo := persistence.NewCommentRepository(deps.DB)
+	uploadRepo := persistence.NewUploadFileRepository(deps.DB)
 	pageSvc := page.NewService(contentRepo, commentRepo, deps.EventBus)
-	return handler.NewPageHandler(pageSvc, commentRepo)
+	mediaSvc := mediaapp.NewService(uploadRepo, deps.Config.Storage, deps.SysConfig, deps.EventBus)
+	return handler.NewPageHandler(pageSvc, commentRepo, mediaSvc)
 }

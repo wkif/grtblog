@@ -82,6 +82,10 @@ export function useFileList(message: {
     return value.trim().replace(/\/+$/, '')
   }
 
+  function isAbsoluteUrl(value: string) {
+    return /^https?:\/\//i.test(value.trim())
+  }
+
   async function fetchPublicUrl() {
     try {
       const list = await listWebsiteInfo()
@@ -178,8 +182,10 @@ export function useFileList(message: {
 
   async function handleCopyUrl(file: UploadFileResponse) {
     try {
-      const base = publicUrl.value ? normalizePublicUrl(publicUrl.value) : window.location.origin
-      await navigator.clipboard.writeText(`${base}${file.publicUrl}`)
+      const link = isAbsoluteUrl(file.publicUrl)
+        ? file.publicUrl
+        : `${publicUrl.value ? normalizePublicUrl(publicUrl.value) : window.location.origin}${file.publicUrl}`
+      await navigator.clipboard.writeText(link)
       message.success('链接已复制到剪贴板')
     } catch (error) {
       message.error('复制失败')

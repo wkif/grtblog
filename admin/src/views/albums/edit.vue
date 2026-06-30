@@ -78,7 +78,7 @@ async function handlePhotoUpload(e: Event) {
   try {
     const items: { url: string; exif?: Record<string, unknown> | null }[] = []
     for (const file of Array.from(input.files)) {
-      const [res, exif] = await Promise.all([uploadFile(file, 'picture'), extractExif(file)])
+      const [res, exif] = await Promise.all([uploadFile(file, 'cache'), extractExif(file)])
       // Merge backend imageMeta (width/height/dominantColor) into exif
       const merged = { ...(exif || {}) }
       if (res.imageMeta) {

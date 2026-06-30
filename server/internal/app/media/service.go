@@ -17,7 +17,9 @@ import (
 	"math"
 	"mime/multipart"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -26,33 +28,54 @@ import (
 	goexif "github.com/rwcarlsen/goexif/exif"
 
 	appEvent "github.com/grtsinry43/grtblog-v2/server/internal/app/event"
+	"github.com/grtsinry43/grtblog-v2/server/internal/app/sysconfig"
+	"github.com/grtsinry43/grtblog-v2/server/internal/config"
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/media"
 )
 
 type Service struct {
-	repo      media.Repository
-	uploadDir string
-	events    appEvent.Bus
+	repo               media.Repository
+	uploadDir          string
+	events             appEvent.Bus
+	localStorage       *localStorage
+	defaultUploadStore string
+	defaultOSS         config.OSSConfig
+	sysCfg             *sysconfig.Service
+	cacheDir           string
+	imageDir           string
+	videoDir           string
+	fileDir            string
 }
 
-func NewService(repo media.Repository, uploadDir string, events appEvent.Bus) *Service {
-	trimmed := strings.TrimSpace(uploadDir)
-	if trimmed == "" {
-		trimmed = filepath.Join("storage", "uploads")
-	}
+func NewService(repo media.Repository, cfg config.StorageConfig, sysCfg *sysconfig.Service, events appEvent.Bus) *Service {
+	local := newLocalStorage(cfg.UploadDir)
 	if events == nil {
 		events = appEvent.NopBus{}
 	}
-	return &Service{
-		repo:      repo,
-		uploadDir: trimmed,
-		events:    events,
+	service := &Service{
+		repo:               repo,
+		uploadDir:          local.uploadDir,
+		events:             events,
+		localStorage:       local,
+		defaultUploadStore: storageProviderLocal,
+		defaultOSS:         cfg.OSS,
+		sysCfg:             sysCfg,
+		cacheDir:           cleanManagedDir(cfg.CacheDir, "blog/cache"),
+		imageDir:           cleanManagedDir(cfg.ImageDir, "blog/images"),
+		videoDir:           cleanManagedDir(cfg.VideoDir, "blog/video"),
+		fileDir:            cleanManagedDir(cfg.FileDir, "blog/files"),
 	}
+	if provider := strings.ToLower(strings.TrimSpace(cfg.Provider)); provider != "" {
+		service.defaultUploadStore = provider
+	}
+	return service
 }
 
 const thumbnailMaxWidth = 1200
 const thumbnailDir = "thumbnails"
 const thumbnailQuality = 82
+
+var managedURLPattern = regexp.MustCompile("https?://[^\\s<>\"'`\\)\\]]+|/uploads/[^\\s<>\"'`\\)\\]]+")
 
 // ImageMeta 图片元信息，上传图片时自动提取。
 type ImageMeta struct {
@@ -85,12 +108,100 @@ type indexedDiskFile struct {
 	Hash string
 }
 
+type uploadSelection struct {
+	kind string
+	dir  string
+}
+
+type managedDirs struct {
+	cacheDir string
+	imageDir string
+	videoDir string
+	fileDir  string
+}
+
+type runtimeStorage struct {
+	provider string
+	local    *localStorage
+	oss      *aliyunOSSStorage
+	dirs     managedDirs
+}
+
+func (s *Service) currentStorage(ctx context.Context) runtimeStorage {
+	settings := config.StorageConfig{
+		Provider: s.defaultUploadStore,
+		CacheDir: s.cacheDir,
+		ImageDir: s.imageDir,
+		VideoDir: s.videoDir,
+		FileDir:  s.fileDir,
+		OSS:      s.defaultOSS,
+	}
+	if s.sysCfg != nil {
+		settings = s.sysCfg.StorageSettings(ctx)
+	}
+	current := runtimeStorage{
+		provider: normalizeProvider(settings.Provider),
+		local:    s.localStorage,
+		dirs: managedDirs{
+			cacheDir: cleanManagedDir(settings.CacheDir, s.cacheDir),
+			imageDir: cleanManagedDir(settings.ImageDir, s.imageDir),
+			videoDir: cleanManagedDir(settings.VideoDir, s.videoDir),
+			fileDir:  cleanManagedDir(settings.FileDir, s.fileDir),
+		},
+	}
+	if ossStorage, err := newAliyunOSSStorage(settings.OSS); err == nil {
+		current.oss = ossStorage
+	}
+	return current
+}
+
+func normalizeProvider(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case storageProviderAliyunOSS:
+		return storageProviderAliyunOSS
+	case "", storageProviderLocal:
+		return storageProviderLocal
+	default:
+		return storageProviderLocal
+	}
+}
+
+func (s *Service) defaultBackend(current runtimeStorage) (storageBackend, error) {
+	switch current.provider {
+	case "", storageProviderLocal:
+		return current.local, nil
+	case storageProviderAliyunOSS:
+		if current.oss == nil {
+			return nil, errors.New("aliyun oss storage is not configured")
+		}
+		return current.oss, nil
+	default:
+		return nil, fmt.Errorf("unsupported storage provider: %s", current.provider)
+	}
+}
+
+func (s *Service) backendForStoredPath(current runtimeStorage, storedPath string) storageBackend {
+	if isOSSStoredPath(storedPath) {
+		return current.oss
+	}
+	return current.local
+}
+
+func (s *Service) buildStoredPath(current runtimeStorage, store storageBackend, dir string, ext string) string {
+	filename := s.buildFilename(dir, ext)
+	if current.oss != nil && store == current.oss {
+		return makeOSSStoredPath(path.Join(dir, filename))
+	}
+	return normalizeStoredPath("/" + dir + "/" + filename)
+}
+
 func (s *Service) Upload(ctx context.Context, file *multipart.FileHeader, fileType string) (*UploadResult, error) {
 	if file == nil {
 		return nil, errors.New("file is required")
 	}
 
-	dir, err := dirForType(fileType)
+	current := s.currentStorage(ctx)
+	selection, err := s.selectUploadTarget(fileType, file, current.dirs)
 	if err != nil {
 		return nil, err
 	}
@@ -104,43 +215,53 @@ func (s *Service) Upload(ctx context.Context, file *multipart.FileHeader, fileTy
 	if err != nil && !errors.Is(err, media.ErrUploadFileNotFound) {
 		return nil, err
 	}
-
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	filename := s.buildFilename(dir, ext)
-	storedPath := "/" + dir + "/" + filename
-	diskPath := s.diskPathFromStored(storedPath)
-
-	if existing != nil {
-		existingDisk := s.diskPathFromStored(existing.Path)
-		if fileExists(existingDisk) {
-			thumbURL, meta := s.processImage(existingDisk, existing.Path, dir)
-			return &UploadResult{File: *existing, Created: false, ThumbnailURL: thumbURL, ImageMeta: meta}, nil
-		}
-		if err := s.saveFile(file, diskPath); err != nil {
+	if existing != nil && existing.Type == selection.kind {
+		existing, err = s.prepareExistingUploadForTarget(ctx, existing, selection, current)
+		if err != nil {
 			return nil, err
 		}
-		if existing.Path != storedPath {
-			if err := s.repo.UpdatePath(ctx, existing.ID, storedPath); err != nil {
+	}
+
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if existing != nil {
+		if !isOSSStoredPath(existing.Path) {
+			existingDisk := s.localStorage.diskPathFromStored(existing.Path)
+			if fileExists(existingDisk) {
+				thumbURL, meta := s.processImage(existing.Path, existing.Type)
+				return &UploadResult{File: *existing, Created: false, ThumbnailURL: thumbURL, ImageMeta: meta}, nil
+			}
+			if err := s.localStorage.Upload(ctx, existing.Path, file); err != nil {
 				return nil, err
 			}
-			existing.Path = storedPath
 		}
-		thumbURL, meta := s.processImage(diskPath, storedPath, dir)
+		thumbURL, meta := s.processImage(existing.Path, existing.Type)
 		return &UploadResult{File: *existing, Created: false, ThumbnailURL: thumbURL, ImageMeta: meta}, nil
 	}
 
-	if err := s.saveFile(file, diskPath); err != nil {
+	store, err := s.defaultBackend(current)
+	if err != nil {
+		return nil, err
+	}
+	storedPath := s.buildStoredPath(current, store, selection.dir, ext)
+	if err := store.Upload(ctx, storedPath, file); err != nil {
 		return nil, err
 	}
 
 	record := &media.UploadFile{
 		Name: file.Filename,
 		Path: storedPath,
-		Type: strings.ToLower(strings.TrimSpace(fileType)),
+		Type: selection.kind,
 		Size: file.Size,
 		Hash: hash,
 	}
 	if err := s.repo.Create(ctx, record); err != nil {
+		if existing, handled, resolveErr := s.resolveDuplicateHashUpload(ctx, err, hash, selection, store, storedPath); handled {
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			thumbURL, meta := s.processImage(existing.Path, existing.Type)
+			return &UploadResult{File: *existing, Created: false, ThumbnailURL: thumbURL, ImageMeta: meta}, nil
+		}
 		return nil, err
 	}
 	_ = s.events.Publish(ctx, appEvent.Generic{
@@ -154,8 +275,97 @@ func (s *Service) Upload(ctx context.Context, file *multipart.FileHeader, fileTy
 			"Size": record.Size,
 		},
 	})
-	thumbURL, meta := s.processImage(diskPath, storedPath, dir)
+	thumbURL, meta := s.processImage(storedPath, selection.kind)
 	return &UploadResult{File: *record, Created: true, ThumbnailURL: thumbURL, ImageMeta: meta}, nil
+}
+
+func (s *Service) resolveDuplicateHashUpload(
+	ctx context.Context,
+	createErr error,
+	hash string,
+	selection uploadSelection,
+	store storageBackend,
+	storedPath string,
+) (*media.UploadFile, bool, error) {
+	if !isDuplicateUploadHashError(createErr) {
+		return nil, false, nil
+	}
+	if store != nil && storedPath != "" {
+		_ = store.Delete(ctx, storedPath)
+	}
+	existing, err := s.repo.FindByHash(ctx, hash)
+	if err != nil {
+		return nil, true, err
+	}
+	if existing.Type != selection.kind {
+		return nil, true, createErr
+	}
+	current := s.currentStorage(ctx)
+	existing, err = s.prepareExistingUploadForTarget(ctx, existing, selection, current)
+	if err != nil {
+		return nil, true, err
+	}
+	return existing, true, nil
+}
+
+func isDuplicateUploadHashError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "uq_upload_file_hash") ||
+		(strings.Contains(msg, "duplicate key value") && strings.Contains(msg, "upload_file")) ||
+		strings.Contains(msg, "SQLSTATE 23505")
+}
+
+func (s *Service) prepareExistingUploadForTarget(
+	ctx context.Context,
+	existing *media.UploadFile,
+	selection uploadSelection,
+	current runtimeStorage,
+) (*media.UploadFile, error) {
+	if existing == nil {
+		return nil, nil
+	}
+	targetIsCache := selection.dir == current.dirs.cacheDir
+	existingIsCache := s.isCacheStoredPath(existing.Path, current.dirs)
+	if targetIsCache || !existingIsCache {
+		return existing, nil
+	}
+	targetDir := s.finalDirForType(existing.Type, current.dirs)
+	return s.promoteRecordToDir(ctx, existing, targetDir, current)
+}
+
+func (s *Service) promoteRecordToDir(
+	ctx context.Context,
+	record *media.UploadFile,
+	targetDir string,
+	current runtimeStorage,
+) (*media.UploadFile, error) {
+	targetStoredPath := s.buildPromotedStoredPath(record.Path, targetDir)
+	if targetStoredPath == "" || targetStoredPath == record.Path {
+		return record, nil
+	}
+	switch backend := s.backendForStoredPath(current, record.Path).(type) {
+	case *localStorage:
+		if err := backend.Move(record.Path, targetStoredPath); err != nil {
+			return nil, err
+		}
+	case *aliyunOSSStorage:
+		if err := backend.Move(ctx, record.Path, targetStoredPath); err != nil {
+			return nil, err
+		}
+	case nil:
+		return nil, errors.New("storage backend is not configured")
+	default:
+		return nil, errors.New("unsupported storage backend for draft promotion")
+	}
+	record.Path = targetStoredPath
+	record.Type = s.detectTypeByPath(record.Path)
+	if err := s.repo.Update(ctx, record); err != nil {
+		return nil, err
+	}
+	return record, nil
 }
 
 type ListResult struct {
@@ -209,6 +419,9 @@ func (s *Service) SyncIndex(ctx context.Context) (*SyncResult, error) {
 	existingByHash := make(map[string]*media.UploadFile, len(existing))
 	for i := range existing {
 		file := &existing[i]
+		if isOSSStoredPath(file.Path) {
+			continue
+		}
 		existingByPath[file.Path] = file
 		if strings.TrimSpace(file.Hash) != "" {
 			existingByHash[file.Hash] = file
@@ -267,6 +480,9 @@ func (s *Service) SyncIndex(ctx context.Context) (*SyncResult, error) {
 
 	for i := range existing {
 		file := &existing[i]
+		if isOSSStoredPath(file.Path) {
+			continue
+		}
 		if _, ok := usedIDs[file.ID]; ok {
 			continue
 		}
@@ -303,8 +519,12 @@ func (s *Service) Delete(ctx context.Context, id int64) (*media.UploadFile, erro
 	if err != nil {
 		return nil, err
 	}
-	diskPath := s.diskPathFromStored(file.Path)
-	if err := removeFile(diskPath); err != nil {
+	current := s.currentStorage(ctx)
+	backend := s.backendForStoredPath(current, file.Path)
+	if backend == nil {
+		return nil, errors.New("storage backend is not configured")
+	}
+	if err := backend.Delete(ctx, file.Path); err != nil {
 		return nil, err
 	}
 	if err := s.repo.DeleteByID(ctx, id); err != nil {
@@ -328,8 +548,142 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*media.UploadFile, err
 	return s.repo.FindByID(ctx, id)
 }
 
+func (s *Service) PublicURL(storedPath string) string {
+	current := s.currentStorage(context.Background())
+	backend := s.backendForStoredPath(current, storedPath)
+	if backend == nil {
+		return ""
+	}
+	return backend.PublicURL(storedPath)
+}
+
+func (s *Service) OpenStoredFile(ctx context.Context, storedPath string) (io.ReadCloser, error) {
+	current := s.currentStorage(ctx)
+	backend := s.backendForStoredPath(current, storedPath)
+	if backend == nil {
+		return nil, errors.New("storage backend is not configured")
+	}
+	return backend.Open(ctx, storedPath)
+}
+
+func (s *Service) PromoteDraftURL(ctx context.Context, publicURL string) (string, error) {
+	publicURL = normalizeManagedPublicURLInput(publicURL)
+	if publicURL == "" {
+		return publicURL, nil
+	}
+	current := s.currentStorage(ctx)
+	storedPath, ok := s.storedPathFromPublicURL(ctx, publicURL)
+	if !ok || !s.isCacheStoredPath(storedPath, current.dirs) {
+		return publicURL, nil
+	}
+	record, err := s.repo.FindByPath(ctx, storedPath)
+	if err != nil {
+		if errors.Is(err, media.ErrUploadFileNotFound) {
+			if promoted := s.findPromotedRecordForCachePath(ctx, storedPath, current.dirs); promoted != nil {
+				return s.PublicURL(promoted.Path), nil
+			}
+		}
+		return "", err
+	}
+	targetDir := s.finalDirForType(record.Type, current.dirs)
+	targetStoredPath := s.buildPromotedStoredPath(record.Path, targetDir)
+	if targetStoredPath == "" || targetStoredPath == record.Path {
+		return s.PublicURL(record.Path), nil
+	}
+
+	switch backend := s.backendForStoredPath(current, record.Path).(type) {
+	case *localStorage:
+		if err := backend.Move(record.Path, targetStoredPath); err != nil {
+			return "", err
+		}
+	case *aliyunOSSStorage:
+		if err := backend.Move(ctx, record.Path, targetStoredPath); err != nil {
+			return "", err
+		}
+	case nil:
+		return "", errors.New("storage backend is not configured")
+	default:
+		return "", errors.New("unsupported storage backend for draft promotion")
+	}
+
+	record.Path = targetStoredPath
+	record.Type = s.detectTypeByPath(record.Path)
+	if err := s.repo.Update(ctx, record); err != nil {
+		return "", err
+	}
+	return s.PublicURL(record.Path), nil
+}
+
+func (s *Service) findPromotedRecordForCachePath(ctx context.Context, storedPath string, dirs managedDirs) *media.UploadFile {
+	if !s.isCacheStoredPath(storedPath, dirs) {
+		return nil
+	}
+	fileType := s.detectTypeByPath(storedPath)
+	candidates := []string{
+		s.buildPromotedStoredPath(storedPath, s.finalDirForType(fileType, dirs)),
+	}
+	for _, dir := range []string{dirs.imageDir, dirs.videoDir, dirs.fileDir} {
+		candidate := s.buildPromotedStoredPath(storedPath, dir)
+		if candidate == "" {
+			continue
+		}
+		seen := false
+		for _, existing := range candidates {
+			if existing == candidate {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			candidates = append(candidates, candidate)
+		}
+	}
+	for _, candidate := range candidates {
+		record, err := s.repo.FindByPath(ctx, candidate)
+		if err == nil {
+			return record
+		}
+		if err != nil && !errors.Is(err, media.ErrUploadFileNotFound) {
+			return nil
+		}
+	}
+	return nil
+}
+
+func (s *Service) RewriteDraftURLs(ctx context.Context, text string) (string, error) {
+	if strings.TrimSpace(text) == "" {
+		return text, nil
+	}
+	matches := managedURLPattern.FindAllString(text, -1)
+	if len(matches) == 0 {
+		return text, nil
+	}
+	replacements := make([]string, 0, len(matches)*2)
+	seen := make(map[string]struct{}, len(matches))
+	for _, match := range matches {
+		if _, ok := seen[match]; ok {
+			continue
+		}
+		seen[match] = struct{}{}
+		rewritten, err := s.PromoteDraftURL(ctx, match)
+		if err != nil {
+			return "", err
+		}
+		if rewritten != match {
+			replacements = append(replacements, match, rewritten)
+		}
+	}
+	if len(replacements) == 0 {
+		return text, nil
+	}
+	return strings.NewReplacer(replacements...).Replace(text), nil
+}
+
 func (s *Service) ResolveDiskPath(storedPath string) (string, error) {
-	diskPath := s.diskPathFromStored(storedPath)
+	if isOSSStoredPath(storedPath) {
+		return "", errors.New("oss stored file does not have a local disk path")
+	}
+	diskPath := s.localStorage.diskPathFromStored(storedPath)
 	if diskPath == "" {
 		return "", errors.New("empty stored path")
 	}
@@ -337,11 +691,31 @@ func (s *Service) ResolveDiskPath(storedPath string) (string, error) {
 }
 
 // processImage 为图片生成缩略图并提取元信息（尺寸 + 主色调）。
-func (s *Service) processImage(diskPath string, storedPath string, dir string) (thumbURL string, meta *ImageMeta) {
-	if dir != "pictures" {
+func (s *Service) processImage(storedPath string, fileType string) (thumbURL string, meta *ImageMeta) {
+	if strings.ToLower(strings.TrimSpace(fileType)) != "picture" {
 		return "", nil
 	}
+	if isOSSStoredPath(storedPath) {
+		reader, err := s.OpenStoredFile(context.Background(), storedPath)
+		if err != nil {
+			log.Printf("[image] open failed for %s: %v", storedPath, err)
+			return "", nil
+		}
+		defer reader.Close()
+		src, _, err := image.Decode(reader)
+		if err != nil {
+			log.Printf("[image] decode failed for %s: %v", storedPath, err)
+			return "", nil
+		}
+		bounds := src.Bounds()
+		return "", &ImageMeta{
+			Width:         bounds.Dx(),
+			Height:        bounds.Dy(),
+			DominantColor: calcDominantColor(src),
+		}
+	}
 
+	diskPath := s.localStorage.diskPathFromStored(storedPath)
 	f, err := os.Open(diskPath)
 	if err != nil {
 		log.Printf("[image] open failed for %s: %v", diskPath, err)
@@ -364,7 +738,7 @@ func (s *Service) processImage(diskPath string, storedPath string, dir string) (
 
 	// Generate thumbnail
 	thumbStoredPath := "/" + thumbnailDir + storedPath
-	thumbDiskPath := s.diskPathFromStored(thumbStoredPath)
+	thumbDiskPath := s.localStorage.diskPathFromStored(thumbStoredPath)
 
 	if !fileExists(thumbDiskPath) {
 		thumb := imaging.Resize(src, thumbnailMaxWidth, 0, imaging.Lanczos)
@@ -384,7 +758,7 @@ func (s *Service) processImage(diskPath string, storedPath string, dir string) (
 		}
 	}
 
-	return "/uploads" + thumbStoredPath, meta
+	return s.localStorage.PublicURL(thumbStoredPath), meta
 }
 
 // calcDominantColor 采样缩小后取平均色。
@@ -414,16 +788,14 @@ func calcDominantColor(img image.Image) string {
 // ThumbnailURLFor 根据原图公开 URL 返回对应缩略图的公开 URL。
 // 如果缩略图不存在于磁盘，返回空字符串。
 func (s *Service) ThumbnailURLFor(publicURL string) string {
-	// publicURL = /uploads/pictures/2026-...
-	const prefix = "/uploads"
-	if !strings.HasPrefix(publicURL, prefix) {
+	storedPath, ok := s.storedPathFromPublicURL(context.Background(), publicURL)
+	if !ok || isOSSStoredPath(storedPath) {
 		return ""
 	}
-	storedPath := strings.TrimPrefix(publicURL, prefix) // /pictures/2026-...
 	thumbStoredPath := "/" + thumbnailDir + storedPath
-	thumbDiskPath := s.diskPathFromStored(thumbStoredPath)
+	thumbDiskPath := s.localStorage.diskPathFromStored(thumbStoredPath)
 	if fileExists(thumbDiskPath) {
-		return prefix + thumbStoredPath
+		return s.localStorage.PublicURL(thumbStoredPath)
 	}
 	return ""
 }
@@ -438,18 +810,106 @@ func (s *Service) ExtractImageMetaFromURL(publicURL string) (thumbURL string, me
 // ExtractPhotoMetadataFromURL 根据本站公开 URL 提取图片元信息和 EXIF 摘要。
 // 外链或不存在的本地文件返回空结果。
 func (s *Service) ExtractPhotoMetadataFromURL(publicURL string) (thumbURL string, meta *ImageMeta, exifData map[string]any) {
-	const prefix = "/uploads"
-	if !strings.HasPrefix(publicURL, prefix) {
+	storedPath, ok := s.storedPathFromPublicURL(context.Background(), publicURL)
+	if !ok {
 		return "", nil, nil
 	}
-	storedPath := strings.TrimPrefix(publicURL, prefix)
-	diskPath := s.diskPathFromStored(storedPath)
+	if isOSSStoredPath(storedPath) {
+		thumbURL, meta = s.processImage(storedPath, "picture")
+		return thumbURL, meta, nil
+	}
+	diskPath := s.localStorage.diskPathFromStored(storedPath)
 	if !fileExists(diskPath) {
 		return "", nil, nil
 	}
-	thumbURL, meta = s.processImage(diskPath, storedPath, "pictures")
+	thumbURL, meta = s.processImage(storedPath, "picture")
 	exifData = extractExifSummary(diskPath)
 	return thumbURL, meta, exifData
+}
+
+func (s *Service) storedPathFromPublicURL(ctx context.Context, publicURL string) (string, bool) {
+	publicURL = normalizeManagedPublicURLInput(publicURL)
+	if publicURL == "" {
+		return "", false
+	}
+	const localPrefix = "/uploads"
+	if strings.HasPrefix(publicURL, localPrefix) {
+		storedPath := normalizeStoredPath(strings.TrimPrefix(publicURL, localPrefix))
+		return storedPath, storedPath != ""
+	}
+	current := s.currentStorage(ctx)
+	if current.oss != nil {
+		return current.oss.matchPublicURL(publicURL)
+	}
+	return "", false
+}
+
+func normalizeManagedPublicURLInput(value string) string {
+	trimmed := strings.TrimSpace(value)
+	for {
+		next := strings.Trim(trimmed, "`\"'<>")
+		next = strings.TrimSpace(next)
+		if next == trimmed {
+			return next
+		}
+		trimmed = next
+	}
+}
+
+func (s *Service) selectUploadTarget(fileType string, file *multipart.FileHeader, dirs managedDirs) (uploadSelection, error) {
+	requested := strings.ToLower(strings.TrimSpace(fileType))
+	switch requested {
+	case "picture":
+		return uploadSelection{kind: "picture", dir: dirs.imageDir}, nil
+	case "video":
+		return uploadSelection{kind: "video", dir: dirs.videoDir}, nil
+	case "file":
+		return uploadSelection{kind: "file", dir: dirs.fileDir}, nil
+	case "cache":
+		kind := detectUploadKind(file)
+		return uploadSelection{kind: kind, dir: dirs.cacheDir}, nil
+	default:
+		return uploadSelection{}, media.ErrInvalidUploadType
+	}
+}
+
+func (s *Service) isCacheStoredPath(storedPath string, dirs managedDirs) bool {
+	return s.dirMatchesStoredPath(storedPath, dirs.cacheDir)
+}
+
+func (s *Service) finalDirForType(fileType string, dirs managedDirs) string {
+	switch strings.ToLower(strings.TrimSpace(fileType)) {
+	case "picture":
+		return dirs.imageDir
+	case "video":
+		return dirs.videoDir
+	default:
+		return dirs.fileDir
+	}
+}
+
+func (s *Service) buildPromotedStoredPath(storedPath string, dir string) string {
+	baseName := path.Base(strings.TrimPrefix(strings.TrimPrefix(normalizeStoredPath(storedPath), ossStoredPathPrefix), "/"))
+	if baseName == "" || baseName == "." {
+		return ""
+	}
+	if isOSSStoredPath(storedPath) {
+		return makeOSSStoredPath(path.Join(dir, baseName))
+	}
+	return normalizeStoredPath("/" + path.Join(dir, baseName))
+}
+
+func (s *Service) dirMatchesStoredPath(storedPath string, dir string) bool {
+	candidate := path.Clean("/" + strings.Trim(dir, "/"))
+	if candidate == "/" {
+		return false
+	}
+	normalized := normalizeStoredPath(storedPath)
+	if isOSSStoredPath(normalized) {
+		return strings.HasPrefix(objectKeyFromStoredPath(normalized), strings.TrimPrefix(candidate, "/")+"/") ||
+			objectKeyFromStoredPath(normalized) == strings.TrimPrefix(candidate, "/")
+	}
+	return strings.HasPrefix(normalized, candidate+"/") || normalized == candidate
 }
 
 func resolveSyncTarget(pathRecord *media.UploadFile, hashRecord *media.UploadFile) *media.UploadFile {
@@ -555,53 +1015,21 @@ func (s *Service) shouldSkipSyncDir(path string) bool {
 
 func detectIndexedFileType(storedPath string) string {
 	clean := strings.ToLower(filepath.ToSlash(strings.TrimSpace(storedPath)))
-	if strings.HasPrefix(clean, "/pictures/") {
+	if strings.HasPrefix(clean, "/blog/images/") || strings.HasPrefix(clean, "/pictures/") {
 		return "picture"
 	}
+	if strings.HasPrefix(clean, "/blog/video/") {
+		return "video"
+	}
 
-	switch filepath.Ext(clean) {
+	switch strings.ToLower(filepath.Ext(clean)) {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif", ".heic", ".heif", ".tif", ".tiff":
 		return "picture"
+	case ".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".wmv", ".flv", ".mpeg", ".mpg":
+		return "video"
 	default:
 		return "file"
 	}
-}
-
-func (s *Service) saveFile(file *multipart.FileHeader, path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if fileExists(path) {
-		return nil
-	}
-	src, err := file.Open()
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	dst, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return err
-	}
-	defer dst.Close()
-
-	_, err = io.Copy(dst, src)
-	return err
-}
-
-func (s *Service) diskPathFromStored(storedPath string) string {
-	trimmed := strings.TrimSpace(storedPath)
-	if trimmed == "" {
-		return ""
-	}
-	clean := filepath.Clean(trimmed)
-	clean = strings.TrimPrefix(clean, string(filepath.Separator))
-	uploadDir := filepath.Clean(s.uploadDir)
-	if strings.HasPrefix(clean, uploadDir+string(filepath.Separator)) || clean == uploadDir {
-		return clean
-	}
-	return filepath.Join(uploadDir, clean)
 }
 
 func (s *Service) buildFilename(dir string, ext string) string {
@@ -613,7 +1041,7 @@ func (s *Service) buildFilename(dir string, ext string) string {
 	for i := 0; i < 5; i++ {
 		suffix := randomHex(2)
 		filename := base + "-" + suffix + ext
-		if !fileExists(filepath.Join(s.uploadDir, dir, filename)) {
+		if !fileExists(s.localStorage.diskPathFromStored("/" + dir + "/" + filename)) {
 			return filename
 		}
 	}
@@ -637,15 +1065,45 @@ func randomHex(n int) string {
 	return fallback
 }
 
-func dirForType(fileType string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(fileType)) {
-	case "picture":
-		return "pictures", nil
-	case "file":
-		return "files", nil
-	default:
-		return "", media.ErrInvalidUploadType
+func cleanManagedDir(value string, fallback string) string {
+	trimmed := strings.Trim(strings.TrimSpace(value), "/")
+	if trimmed == "" {
+		return fallback
 	}
+	return trimmed
+}
+
+func detectUploadKind(file *multipart.FileHeader) string {
+	if file == nil {
+		return "file"
+	}
+	contentType := strings.ToLower(strings.TrimSpace(file.Header.Get("Content-Type")))
+	if strings.HasPrefix(contentType, "image/") {
+		return "picture"
+	}
+	if strings.HasPrefix(contentType, "video/") {
+		return "video"
+	}
+	return detectTypeByName(file.Filename)
+}
+
+func detectTypeByName(name string) string {
+	switch strings.ToLower(strings.TrimSpace(filepath.Ext(name))) {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif", ".heic", ".heif", ".tif", ".tiff":
+		return "picture"
+	case ".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".wmv", ".flv", ".mpeg", ".mpg":
+		return "video"
+	default:
+		return "file"
+	}
+}
+
+func (s *Service) detectTypeByPath(storedPath string) string {
+	normalized := normalizeStoredPath(storedPath)
+	if isOSSStoredPath(normalized) {
+		return detectIndexedFileType("/" + objectKeyFromStoredPath(normalized))
+	}
+	return detectIndexedFileType(normalized)
 }
 
 func hashFile(file *multipart.FileHeader) (string, error) {

@@ -72,11 +72,7 @@ type UploadRenameReq struct {
 	Name string `json:"name"`
 }
 
-func ToUploadFileResp(file media.UploadFile, duplicated bool, thumbnailURL string, imgMeta *UploadImageMeta) UploadFileResp {
-	publicURL := ""
-	if file.Path != "" {
-		publicURL = "/uploads" + file.Path
-	}
+func ToUploadFileResp(file media.UploadFile, publicURL string, duplicated bool, thumbnailURL string, imgMeta *UploadImageMeta) UploadFileResp {
 	return UploadFileResp{
 		ID:           file.ID,
 		Name:         file.Name,

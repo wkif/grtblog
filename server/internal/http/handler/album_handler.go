@@ -40,6 +40,11 @@ func (h *AlbumHandler) CreateAlbum(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return response.NewBizErrorWithCause(response.ParamsError, "请求体解析失败", err)
 	}
+	var err error
+	req.Cover, err = finalizeDraftOptionalURL(c.Context(), h.mediaSvc, req.Cover)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "封面资源处理失败", err)
+	}
 
 	cmd := appalbum.CreateAlbumCmd{
 		Title:        req.Title,
@@ -91,6 +96,10 @@ func (h *AlbumHandler) UpdateAlbum(c *fiber.Ctx) error {
 	var req contract.UpdateAlbumReq
 	if err := c.BodyParser(&req); err != nil {
 		return response.NewBizErrorWithCause(response.ParamsError, "请求体解析失败", err)
+	}
+	req.Cover, err = finalizeDraftOptionalURL(c.Context(), h.mediaSvc, req.Cover)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "封面资源处理失败", err)
 	}
 
 	cmd := appalbum.UpdateAlbumCmd{
@@ -359,13 +368,17 @@ func (h *AlbumHandler) AddPhotos(c *fiber.Ctx) error {
 
 	cmds := make([]appalbum.CreatePhotoCmd, len(req.Photos))
 	for i, p := range req.Photos {
+		finalURL, err := h.mediaSvc.PromoteDraftURL(c.Context(), p.URL)
+		if err != nil {
+			return response.NewBizErrorWithCause(response.ServerError, "照片资源处理失败", err)
+		}
 		exifMap := map[string]any{}
 		if p.Exif != nil {
 			_ = json.Unmarshal([]byte(*p.Exif), &exifMap)
 		}
 
 		if h.mediaSvc != nil {
-			_, meta, extractedExif := h.mediaSvc.ExtractPhotoMetadataFromURL(p.URL)
+			_, meta, extractedExif := h.mediaSvc.ExtractPhotoMetadataFromURL(finalURL)
 			mergeMissingExifFields(exifMap, extractedExif)
 			if meta != nil {
 				if _, ok := exifMap["imageWidth"]; !ok && meta.Width > 0 {
@@ -386,7 +399,7 @@ func (h *AlbumHandler) AddPhotos(c *fiber.Ctx) error {
 		}
 
 		cmds[i] = appalbum.CreatePhotoCmd{
-			URL:         p.URL,
+			URL:         finalURL,
 			Description: p.Description,
 			Caption:     p.Caption,
 			Exif:        exifBytes,
@@ -432,8 +445,12 @@ func (h *AlbumHandler) UpdatePhoto(c *fiber.Ctx) error {
 	if req.Exif != nil {
 		_ = json.Unmarshal([]byte(*req.Exif), &exifMap)
 	}
+	finalURL, err := h.mediaSvc.PromoteDraftURL(c.Context(), req.URL)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "照片资源处理失败", err)
+	}
 	if h.mediaSvc != nil {
-		_, meta, extractedExif := h.mediaSvc.ExtractPhotoMetadataFromURL(req.URL)
+		_, meta, extractedExif := h.mediaSvc.ExtractPhotoMetadataFromURL(finalURL)
 		mergeMissingExifFields(exifMap, extractedExif)
 		if meta != nil {
 			if _, ok := exifMap["imageWidth"]; !ok && meta.Width > 0 {
@@ -454,7 +471,7 @@ func (h *AlbumHandler) UpdatePhoto(c *fiber.Ctx) error {
 	}
 	updated, err := h.svc.UpdatePhoto(c.Context(), appalbum.UpdatePhotoCmd{
 		ID:          photoID,
-		URL:         req.URL,
+		URL:         finalURL,
 		Description: req.Description,
 		Caption:     req.Caption,
 		Exif:        exifBytes,

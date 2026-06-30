@@ -46,6 +46,18 @@ func (r *UploadFileRepository) FindByID(ctx context.Context, id int64) (*media.U
 	return &entity, nil
 }
 
+func (r *UploadFileRepository) FindByPath(ctx context.Context, uploadPath string) (*media.UploadFile, error) {
+	rec, err := r.repo.First(ctx, "path = ?", uploadPath)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, media.ErrUploadFileNotFound
+		}
+		return nil, err
+	}
+	entity := mapUploadFileToDomain(*rec)
+	return &entity, nil
+}
+
 func (r *UploadFileRepository) Create(ctx context.Context, file *media.UploadFile) error {
 	rec := mapUploadFileToModel(file)
 	if err := r.repo.Create(ctx, &rec); err != nil {

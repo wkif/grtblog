@@ -49,6 +49,14 @@ export interface SysConfigUpdateItem {
   meta?: Record<string, unknown>
 }
 
+export interface StorageConnectionTestResult {
+  provider: string
+  bucket: string
+  endpoint: string
+  publicBaseURL: string
+  prefix: string
+}
+
 export function listSysConfigs(keys?: string[]) {
   const query = keys && keys.length > 0 ? { keys: keys.join(',') } : undefined
   return request<SysConfigTreeResponse>('/admin/sysconfig', {
@@ -60,6 +68,13 @@ export function listSysConfigs(keys?: string[]) {
 export function updateSysConfigs(items: SysConfigUpdateItem[]) {
   return request<SysConfigTreeResponse>('/admin/sysconfig', {
     method: 'PUT',
+    body: { items },
+  })
+}
+
+export function testStorageConnection(items: SysConfigUpdateItem[] = []) {
+  return request<StorageConnectionTestResult>('/admin/sysconfig/storage/test', {
+    method: 'POST',
     body: { items },
   })
 }

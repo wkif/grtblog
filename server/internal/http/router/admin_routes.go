@@ -96,6 +96,7 @@ func registerAdminRoutes(v2 fiber.Router, deps Dependencies, websiteInfoHandler 
 		sysConfigHandler := handler.NewSysConfigHandler(sysCfgSvc)
 		admin.Get("/sysconfig", sysConfigHandler.ListSysConfig)
 		admin.Put("/sysconfig", sysConfigHandler.UpdateSysConfig)
+		admin.Post("/sysconfig/storage/test", sysConfigHandler.TestStorageConnection)
 
 		emailRepo := persistence.NewEmailRepository(deps.DB)
 		emailSender := email.NewSender(sysCfgSvc)

@@ -1,6 +1,6 @@
 import { API_BASE_URL, ApiError, getAuthToken, request } from './http'
 
-export type FileType = 'picture' | 'file'
+export type FileType = 'picture' | 'file' | 'video' | 'cache'
 
 export interface UploadImageMeta {
   width?: number
@@ -55,7 +55,7 @@ export interface UploadProgressEvent {
 /**
  * Upload a file to the server
  * @param file - The file to upload
- * @param type - File type: 'picture' or 'file'
+ * @param type - File type: 'picture', 'file', 'video', or 'cache'
  */
 export async function uploadFile(
   file: File,
@@ -223,6 +223,9 @@ export async function downloadFile(id: number, fileName: string): Promise<void> 
  * @param path - Virtual path from the upload response
  */
 export function getPublicUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path
+  }
   const baseUrl = window.location.origin
   return `${baseUrl}${path}`
 }

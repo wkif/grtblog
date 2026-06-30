@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/article"
+	mediaapp "github.com/grtsinry43/grtblog-v2/server/internal/app/media"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/handler"
 	"github.com/grtsinry43/grtblog-v2/server/internal/http/middleware"
 	"github.com/grtsinry43/grtblog-v2/server/internal/infra/persistence"
@@ -18,7 +19,7 @@ func registerArticlePublicRoutes(v2 fiber.Router, deps Dependencies) {
 	publicGroup.Get("/:id/same-period-moments", articleHandler.ListSamePeriodMoments)
 	publicGroup.Get("/short/:shortUrl", articleHandler.GetArticleByShortURL) // GET /api/v2/articles/short/abc123
 	publicGroup.Post("/:id/latest", articleHandler.CheckArticleLatest)       // POST /api/v2/articles/123/latest
-	publicGroup.Get("/:id/metrics", articleHandler.GetArticleMetrics)       // GET /api/v2/articles/123/metrics
+	publicGroup.Get("/:id/metrics", articleHandler.GetArticleMetrics)        // GET /api/v2/articles/123/metrics
 
 	v2.Get("/categories/short/:shortUrl/articles", articleHandler.ListArticlesByCategoryShortURL)
 }
@@ -52,8 +53,10 @@ func newArticleHandler(deps Dependencies) *handler.ArticleHandler {
 	contentRepo := persistence.NewContentRepository(deps.DB)
 	commentRepo := persistence.NewCommentRepository(deps.DB)
 	identityRepo := persistence.NewIdentityRepository(deps.DB)
+	uploadRepo := persistence.NewUploadFileRepository(deps.DB)
 	articleSvc := article.NewService(contentRepo, commentRepo, deps.EventBus)
-	return handler.NewArticleHandler(articleSvc, contentRepo, commentRepo, identityRepo, deps.SysConfig,
+	mediaSvc := mediaapp.NewService(uploadRepo, deps.Config.Storage, deps.SysConfig, deps.EventBus)
+	return handler.NewArticleHandler(articleSvc, contentRepo, commentRepo, identityRepo, deps.SysConfig, mediaSvc,
 		handler.WithFederationRepos(
 			persistence.NewOutboundDeliveryRepository(deps.DB),
 			persistence.NewFederatedPostCacheRepository(deps.DB),

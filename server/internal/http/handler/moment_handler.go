@@ -9,6 +9,7 @@ import (
 	"github.com/jinzhu/copier"
 
 	"github.com/gofiber/fiber/v2"
+	mediaapp "github.com/grtsinry43/grtblog-v2/server/internal/app/media"
 	domaincomment "github.com/grtsinry43/grtblog-v2/server/internal/domain/comment"
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/content"
 	"github.com/grtsinry43/grtblog-v2/server/internal/domain/identity"
@@ -26,15 +27,17 @@ type MomentHandler struct {
 	commentRepo domaincomment.CommentRepository
 	userRepo    identity.Repository
 	sysCfg      *sysconfig.Service
+	mediaSvc    *mediaapp.Service
 }
 
-func NewMomentHandler(svc *moment.Service, contentRepo content.Repository, commentRepo domaincomment.CommentRepository, userRepo identity.Repository, sysCfg *sysconfig.Service) *MomentHandler {
+func NewMomentHandler(svc *moment.Service, contentRepo content.Repository, commentRepo domaincomment.CommentRepository, userRepo identity.Repository, sysCfg *sysconfig.Service, mediaSvc *mediaapp.Service) *MomentHandler {
 	return &MomentHandler{
 		svc:         svc,
 		contentRepo: contentRepo,
 		commentRepo: commentRepo,
 		userRepo:    userRepo,
 		sysCfg:      sysCfg,
+		mediaSvc:    mediaSvc,
 	}
 }
 
@@ -64,6 +67,18 @@ func (h *MomentHandler) CreateMoment(c *fiber.Ctx) error {
 	extInfo, err := parseExtInfo(req.ExtInfo)
 	if err != nil {
 		return response.NewBizErrorWithCause(response.ParamsError, "extInfo格式错误", err)
+	}
+	req.Content, err = finalizeDraftText(c.Context(), h.mediaSvc, req.Content)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "正文资源处理失败", err)
+	}
+	req.Image, err = finalizeDraftURLs(c.Context(), h.mediaSvc, req.Image)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "图片资源处理失败", err)
+	}
+	extInfo, err = finalizeDraftExtInfo(c.Context(), h.mediaSvc, extInfo)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "扩展资源处理失败", err)
 	}
 
 	cmd := moment.CreateMomentCmd{
@@ -145,6 +160,18 @@ func (h *MomentHandler) UpdateMoment(c *fiber.Ctx) error {
 	extInfo, err := parseExtInfo(req.ExtInfo)
 	if err != nil {
 		return response.NewBizErrorWithCause(response.ParamsError, "extInfo格式错误", err)
+	}
+	req.Content, err = finalizeDraftText(c.Context(), h.mediaSvc, req.Content)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "正文资源处理失败", err)
+	}
+	req.Image, err = finalizeDraftURLs(c.Context(), h.mediaSvc, req.Image)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "图片资源处理失败", err)
+	}
+	extInfo, err = finalizeDraftExtInfo(c.Context(), h.mediaSvc, extInfo)
+	if err != nil {
+		return response.NewBizErrorWithCause(response.ServerError, "扩展资源处理失败", err)
 	}
 
 	cmd := moment.UpdateMomentCmd{

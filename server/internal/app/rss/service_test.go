@@ -93,7 +93,7 @@ func newTestSysCfg(entries map[string]string) *sysconfig.Service {
 		fullKey := "site." + k
 		items[fullKey] = domainconfig.SysConfig{Key: fullKey, Value: v}
 	}
-	return sysconfig.NewService(&fakeSysConfigRepo{items: items}, config.TurnstileConfig{}, appEvent.NopBus{})
+	return sysconfig.NewService(&fakeSysConfigRepo{items: items}, config.TurnstileConfig{}, config.StorageConfig{}, appEvent.NopBus{})
 }
 
 type fakeIdentityRepo struct {
