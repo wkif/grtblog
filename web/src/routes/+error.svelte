@@ -17,7 +17,11 @@
 	const detail = $derived(error?.message || (isNotFound ? 'Not Found' : 'Unexpected Server Error'));
 
 	function goBack() {
-		history.back();
+		if (history.length > 1) {
+			history.back();
+		} else {
+			location.href = resolvePath('/');
+		}
 	}
 
 	function reloadPage() {
@@ -46,28 +50,34 @@
 			aria-hidden="true"
 		></div>
 
-		<span>Code {status}</span>
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<span class="font-mono text-[10px] tracking-[0.22em] text-ink-400 uppercase">页面状态</span>
+				<span class="rounded-full border border-ink-200 bg-white/60 px-2.5 py-1 font-mono text-[10px] text-ink-500 dark:border-ink-700 dark:bg-ink-800/60 dark:text-ink-400">HTTP {status}</span>
+			</div>
 
 		<h1 class="font-serif text-3xl text-ink-900 dark:text-ink-100 md:text-4xl">{title}</h1>
 		<p class="mt-3 text-sm leading-relaxed text-ink-600 dark:text-ink-300 md:text-base">
 			{summary}
 		</p>
 
-		<div
-			class="mt-6 rounded-default border border-ink-200/80 bg-white/70 px-4 py-3 text-xs text-ink-500 dark:border-ink-700/70 dark:bg-ink-900/60 dark:text-ink-400"
-		>
-			{detail}
-		</div>
+		<p class="mt-6 text-xs text-ink-500 dark:text-ink-400">
+			{#if isNotFound}
+				可以返回文章归档，或回到首页继续浏览。
+			{:else}
+				请稍后再试；如果问题持续，可以先回到首页继续浏览其他内容。
+			{/if}
+		</p>
 
 		<div class="mt-8 flex flex-wrap items-center gap-3">
 			<a
 				href={resolvePath('/')}
-				class="inline-flex items-center gap-2 rounded-default border border-jade-500/30 bg-jade-500/10 px-4 py-2 text-sm text-jade-700 transition-colors hover:bg-jade-500/20 dark:text-jade-300"
+				class="inline-flex items-center gap-2 rounded-default border border-jade-500/30 bg-jade-500/10 px-4 py-2 text-sm text-jade-700 transition-colors hover:-translate-y-0.5 hover:bg-jade-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade-500/50 dark:text-jade-300"
 			>
 				<Compass size={14} />
 				回到首页
 			</a>
 			<button
+				type="button"
 				class="inline-flex cursor-pointer items-center gap-2 rounded-default border border-ink-200/80 bg-white px-4 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-100 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-200 dark:hover:bg-ink-700"
 				onclick={goBack}
 			>
@@ -75,6 +85,7 @@
 				返回上一页
 			</button>
 			<button
+				type="button"
 				class="inline-flex cursor-pointer items-center gap-2 rounded-default border border-ink-200/80 bg-white px-4 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-100 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-200 dark:hover:bg-ink-700"
 				onclick={reloadPage}
 			>

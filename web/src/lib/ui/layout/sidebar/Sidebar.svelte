@@ -38,6 +38,14 @@
 			hoveredName = null;
 		}, 100);
 	}
+
+	function handleFocusOut(event: FocusEvent) {
+		const currentTarget = event.currentTarget as HTMLElement | null;
+		const nextTarget = event.relatedTarget as Node | null;
+		if (currentTarget && (!nextTarget || !currentTarget.contains(nextTarget))) {
+			handleMouseLeave();
+		}
+	}
 </script>
 
 <aside
@@ -56,11 +64,14 @@
 				role="group"
 				onmouseenter={() => handleMouseEnter(item.name)}
 				onmouseleave={handleMouseLeave}
+				onfocusin={() => handleMouseEnter(item.name)}
+				onfocusout={handleFocusOut}
 			>
 				<a
 					href={/^(https?:|\/\/)/i.test(item.url) ? item.url : resolveHref(item.url)}
 					aria-label={item.name}
-					class="relative z-20 flex h-10 w-10 items-center justify-center rounded-default transition-all duration-200
+					aria-current={active ? 'page' : undefined}
+					class="relative z-20 flex h-10 w-10 items-center justify-center rounded-default transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FBF9F5] dark:focus-visible:ring-offset-ink-900
                     {active
 						? 'bg-ink-900 text-white shadow-sm dark:bg-ink-100 dark:text-ink-950'
 						: 'hover:bg-ink-200 hover:text-ink-900 dark:hover:bg-ink-800 dark:hover:text-ink-100'}"
@@ -131,7 +142,7 @@
 			<Button
 				variant="icon"
 				onclick={() => windowStore.restore()}
-				class="h-10 w-10 rounded-default bg-jade-500 text-white shadow-lg animate-bounce duration-[2000ms] transition-all"
+				class="window-restore-pulse h-10 w-10 rounded-default bg-jade-500 text-white shadow-lg transition-all"
 				title="恢复窗口"
 			>
 				<LayoutIcon class="h-5 w-5" />
@@ -152,4 +163,26 @@
 
 <style lang="postcss">
 	@reference "$routes/layout.css";
+
+	.window-restore-pulse {
+		animation: window-restore-pulse 2.4s ease-in-out infinite;
+	}
+
+	@keyframes window-restore-pulse {
+		0%,
+		100% {
+			transform: scale(1);
+			box-shadow: 0 10px 24px -12px rgb(20 184 166 / 0.5);
+		}
+		50% {
+			transform: scale(1.06);
+			box-shadow: 0 14px 30px -12px rgb(20 184 166 / 0.72);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.window-restore-pulse {
+			animation: none;
+		}
+	}
 </style>

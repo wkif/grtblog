@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { resolvePath } from '$lib/shared/utils/resolve-path';
 	import Pagination from '$lib/ui/primitives/pagination/Pagination.svelte';
-	import { FileText } from 'lucide-svelte';
+	import { FileText, Home } from 'lucide-svelte';
+	import { resolve } from '$app/paths';
 	import ArticleItem from '$lib/features/post/components/ArticleItem.svelte';
 	import { postListCtx } from '$lib/features/post/context';
 	import { goto } from '$app/navigation';
@@ -127,18 +128,25 @@
 		{/if}
 	{:else}
 		<!-- Empty State -->
-		<div
-			class="flex flex-col items-center justify-center py-16 sm:py-32 text-center space-y-4 border-2 border-dashed border-ink-100 dark:border-ink-800/50 rounded-2xl bg-ink-50/50 dark:bg-ink-900/20"
-		>
+			<div
+				class="flex flex-col items-center justify-center space-y-4 rounded-2xl border-2 border-dashed border-ink-100 bg-ink-50/50 py-16 text-center dark:border-ink-800/50 dark:bg-ink-900/20 sm:py-32"
+			>
 			<div class="relative">
 				<div class="absolute -inset-4 bg-jade-500/10 rounded-full blur-xl animate-pulse"></div>
 				<FileText size={48} class="relative text-ink-300 dark:text-ink-700" />
 			</div>
 			<div class="space-y-1">
 				<h3 class="font-serif text-lg font-medium text-ink-900 dark:text-ink-100">暂无内容</h3>
-				<p class="text-sm text-ink-500 dark:text-ink-500 max-w-xs mx-auto">
-					你似乎来到了一个没有知识的荒原，等待着第一篇文章的诞生。请稍后再来看看，或许很快就会有新的内容出现！
-				</p>
+					<p class="mx-auto max-w-xs text-sm text-ink-500 dark:text-ink-500">
+						当前还没有已发布的文章。你可以回到首页浏览其他内容，或稍后再来看看。
+					</p>
+					<a
+						href={resolve('/')}
+						class="mt-3 inline-flex items-center gap-2 rounded-default border border-jade-500/30 bg-jade-500/10 px-4 py-2 text-xs font-medium text-jade-700 transition hover:-translate-y-0.5 hover:bg-jade-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade-500/50 dark:text-jade-300"
+					>
+						<Home size={13} aria-hidden="true" />
+						回到首页
+					</a>
 			</div>
 		</div>
 	{/if}

@@ -185,6 +185,10 @@
 			<!-- Left: Avatar & Title -->
 			<div class="flex items-center gap-3 overflow-hidden">
 				<button
+					type="button"
+					aria-label={isMobileMenuOpen ? '关闭导航菜单' : '打开导航菜单'}
+					aria-expanded={isMobileMenuOpen}
+					aria-controls="mobile-navigation-panel"
 					onclick={(e) => {
 						e.stopPropagation();
 						isMobileMenuOpen = !isMobileMenuOpen;
@@ -246,6 +250,9 @@
 			<div class="flex items-center gap-1">
 				{#if $detailTocStore.length > 0 || hasRelatedContent}
 					<button
+						type="button"
+						aria-label={$detailTocStore.length > 0 ? '打开文章目录' : '查看相关文章'}
+						aria-expanded={isTocOpen}
 						onclick={(e) => {
 							e.stopPropagation();
 							isMobileMenuOpen = false;
@@ -261,8 +268,11 @@
 
 		<!-- 2. Expanded Content -->
 		{#if isMobileMenuOpen}
-			<div
-				transition:fly={{ y: -12, duration: 380, easing: cubicOut, opacity: 0 }}
+				<div
+					id="mobile-navigation-panel"
+					role="navigation"
+					aria-label="移动端导航"
+					transition:fly={{ y: -12, duration: 380, easing: cubicOut, opacity: 0 }}
 				class="no-scrollbar relative z-10 flex max-h-[75vh] flex-col overflow-y-auto px-2 pb-6 pt-0"
 			>
 				<div
@@ -384,6 +394,8 @@
 								{#if hasChildren}
 									<button
 										type="button"
+										aria-expanded={isExpanded}
+										aria-label={`${isExpanded ? '收起' : '展开'}${item.name}`}
 										onclick={(e) => {
 											e.preventDefault();
 											e.stopPropagation();

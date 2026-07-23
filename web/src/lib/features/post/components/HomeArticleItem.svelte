@@ -5,7 +5,7 @@
 	import { formatRelativeTime } from '$lib/shared/utils/date';
 	import { buildPostPath } from '$lib/shared/utils/content-path';
 
-	let { post } = $props<{ post: PostSummary }>();
+	let { post, featured = false } = $props<{ post: PostSummary; featured?: boolean }>();
 
 	let mouseX = $state('50%');
 	let mouseY = $state('50%');
@@ -27,15 +27,22 @@
 
 <a
 	href={resolvePath(buildPostPath(post.shortUrl))}
-	class="home-item-card article-item group w-full px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-jade-500/30"
+	class="home-item-card article-item group w-full outline-none focus-visible:ring-2 focus-visible:ring-jade-500/30"
+	class:home-item-featured={featured}
 	onmousemove={handleMouseMove}
 	onmouseleave={handleMouseLeave}
 	data-hovered={isHovered}
 	style={`--mouse-x: ${mouseX}; --mouse-y: ${mouseY};`}
 >
-	<div class="home-item-content flex min-w-0 items-center justify-between gap-3">
+	<div class="home-item-content flex min-w-0 flex-col gap-3" class:items-center={!featured}>
+		{#if featured}
+			<div class="flex items-center justify-between gap-4 text-[10px] font-mono uppercase tracking-[0.2em] text-ink-400 dark:text-ink-500">
+				<span class="text-jade-600 dark:text-jade-400">Featured article</span>
+				<span>{formatRelativeTime(post.createdAt)}</span>
+			</div>
+		{/if}
 		<h3
-			class="home-item-title flex min-w-0 items-center gap-1.5 font-serif text-[15px] font-medium text-ink-900 dark:text-ink-100"
+			class={`home-item-title flex min-w-0 items-center gap-1.5 font-serif font-medium text-ink-900 dark:text-ink-100 ${featured ? 'text-2xl leading-tight' : 'text-[15px]'}`}
 		>
 			{#if post.isTop}
 				<span
@@ -47,13 +54,22 @@
 			<span class="title-underline block min-w-0 truncate">{post.title}</span>
 		</h3>
 
-		<div
-			class="flex shrink-0 items-center gap-2 text-[11px] font-mono text-ink-400 dark:text-ink-500"
-		>
-			<span>{formatRelativeTime(post.createdAt)}</span>
+		{#if featured}
+			<p class="max-w-2xl text-sm leading-7 text-ink-500 dark:text-ink-400">{post.summary}</p>
+		{/if}
+
+		<div class="flex items-center justify-between gap-4" class:shrink-0={!featured}>
+			{#if featured && post.categoryName}
+				<span class="text-[10px] font-mono uppercase tracking-[0.18em] text-ink-400">{post.categoryName}</span>
+			{:else if featured}
+				<span></span>
+			{/if}
+			<div class="flex shrink-0 items-center gap-2 text-[11px] font-mono text-ink-400 dark:text-ink-500">
+				{#if !featured}<span>{formatRelativeTime(post.createdAt)}</span>{/if}
 			<span class="home-item-arrow">
 				<ArrowRight size={14} strokeWidth={1.7} />
 			</span>
+			</div>
 		</div>
 	</div>
 </a>
@@ -94,8 +110,9 @@
 		left: 0;
 		top: 50%;
 		width: 2px;
-		height: 0;
-		transform: translateY(-50%);
+		height: 24px;
+		transform: translateY(-50%) scaleY(0);
+		transform-origin: center;
 		border-radius: 1px;
 		background: linear-gradient(
 			180deg,
@@ -105,7 +122,7 @@
 			rgba(20, 184, 166, 0.6),
 			transparent
 		);
-		transition: height 260ms ease;
+		transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
 	}
 
 	.home-item-content {
@@ -162,7 +179,35 @@
 
 	.home-item-card:hover::after,
 	.home-item-card[data-hovered='true']::after {
-		height: 24px;
+		transform: translateY(-50%) scaleY(1);
+	}
+
+	.home-item-featured {
+		padding: 1.5rem;
+		border-color: rgb(20 184 166 / 0.18);
+		background: linear-gradient(135deg, rgb(240 253 250 / 0.8), rgb(255 255 255 / 0.55));
+		box-shadow: 0 18px 50px -32px rgb(13 148 136 / 0.55);
+	}
+
+	.home-item-featured .home-item-title {
+		max-width: 42rem;
+	}
+
+	:global(.dark) .home-item-featured {
+		border-color: rgb(45 212 191 / 0.2);
+		background: linear-gradient(135deg, rgb(19 78 74 / 0.28), rgb(28 25 23 / 0.45));
+		box-shadow: 0 18px 50px -32px rgb(45 212 191 / 0.35);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.home-item-card,
+		.home-item-card::before,
+		.home-item-card::after,
+		.home-item-title,
+		.home-item-arrow,
+		.title-underline::after {
+			transition: none;
+		}
 	}
 
 	.home-item-card:hover .home-item-title,

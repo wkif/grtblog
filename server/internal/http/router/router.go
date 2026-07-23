@@ -87,7 +87,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	sysCfgSvc := deps.SysConfig
 	if sysCfgSvc == nil {
 		sysCfgRepo := persistence.NewSysConfigRepository(deps.DB)
-		sysCfgSvc = sysconfig.NewService(sysCfgRepo, deps.Config.Turnstile, deps.Config.Storage, eventBus)
+		sysCfgSvc = sysconfig.NewServiceWithMedia(sysCfgRepo, deps.Config.Turnstile, deps.Config.Storage, deps.Config.Media, eventBus)
 	}
 	deps.SysConfig = sysCfgSvc
 	wsManager := ws.NewManager(ws.Config{
@@ -166,6 +166,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	isr.RegisterPageSubscribers(eventBus, isrSvc)
 	isr.RegisterThinkingSubscribers(eventBus, isrSvc)
 	isr.RegisterAlbumSubscribers(eventBus, isrSvc)
+	isr.RegisterMediaRecordSubscribers(eventBus, isrSvc)
 	isr.RegisterFriendLinkSubscribers(eventBus, isrSvc)
 	isr.RegisterFriendTimelineSubscribers(eventBus, isrSvc)
 	isr.RegisterLayoutSubscribers(eventBus, isrSvc)
@@ -228,6 +229,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	registerArticlePublicRoutes(v2, deps)
 	registerMomentPublicRoutes(v2, deps)
 	registerAlbumPublicRoutes(v2, deps)
+	registerMediaRecordRoutes(v2, deps)
 	registerThinkingPublicRoutes(v2, deps)
 	registerPagePublicRoutes(v2, deps)
 	registerTaxonomyPublicRoutes(v2, deps)

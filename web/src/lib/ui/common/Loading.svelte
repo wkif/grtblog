@@ -19,7 +19,10 @@
     使用 transition:scale 让加载器出现时有一个缩放弹出的效果
   -->
 	<div
-		class="flex items-center gap-4 flex-col justify-center {customClass}"
+		class="flex flex-col items-center justify-center gap-4 {customClass}"
+		role="status"
+		aria-live="polite"
+		aria-label={text || '正在加载'}
 		in:scale={{ duration: 300, easing: cubicOut, start: 0.5 }}
 		out:fade={{ duration: 200 }}
 	>
@@ -55,6 +58,12 @@
 		100% {
 			/* 结束时：沿 X 轴和 Y 轴都翻转 180度 */
 			transform: perspective(120px) rotateX(-180deg) rotateY(-179.9deg);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.flip-plane {
+			animation: none;
 		}
 	}
 </style>

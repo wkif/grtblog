@@ -194,16 +194,24 @@
 
 	.hero-scroll-hint {
 		@apply absolute right-10 bottom-8 flex h-12 w-12 items-center justify-center text-ink-400 opacity-40;
-		animation: hero-scroll-bounce 1.6s ease-in-out infinite;
+		animation: hero-scroll-float 2.4s ease-in-out infinite;
 	}
 
-	@keyframes hero-scroll-bounce {
+	@keyframes hero-scroll-float {
 		0%,
 		100% {
 			transform: translateY(0);
+			opacity: 0.35;
 		}
 		50% {
-			transform: translateY(8px);
+			transform: translateY(6px);
+			opacity: 0.7;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.hero-scroll-hint {
+			animation: none;
 		}
 	}
 

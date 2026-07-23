@@ -74,7 +74,7 @@ func New(cfg config.Config, db *gorm.DB) *Server {
 	logFile := initLogging()
 	sysCfgRepo := persistence.NewSysConfigRepository(db)
 	eventBus := infraevent.NewInMemoryBus()
-	sysCfgSvc := sysconfig.NewService(sysCfgRepo, cfg.Turnstile, cfg.Storage, eventBus)
+	sysCfgSvc := sysconfig.NewServiceWithMedia(sysCfgRepo, cfg.Turnstile, cfg.Storage, cfg.Media, eventBus)
 	contentRepo := persistence.NewContentRepository(db)
 	albumRepo := persistence.NewAlbumRepository(db)
 	thinkingRepo := persistence.NewThinkingRepository(db)

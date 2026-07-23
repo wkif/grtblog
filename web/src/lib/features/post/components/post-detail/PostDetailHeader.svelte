@@ -11,7 +11,7 @@
 	import ContentLikeButton from '$lib/features/analytics/components/ContentLikeButton.svelte';
 	import TagList from '$lib/features/tag/components/TagList.svelte';
 	import { buildCategoryPath } from '$lib/shared/utils/content-path';
-	import { RollingNumber } from '$lib/ui/animation';
+	import { FadeIn, RollingNumber } from '$lib/ui/animation';
 
 	const titleStore = postDetailCtx.selectModelData((data) => data?.title ?? '');
 	const postIdStore = postDetailCtx.selectModelData((data) => data?.id ?? 0);
@@ -58,6 +58,7 @@
 	</div>
 
 	<div class="space-y-4">
+		<FadeIn y={8} duration={650}>
 		<div class="flex items-center gap-3">
 			<Badge variant="soft">文章</Badge>
 			{#if $categoryShortUrlStore}
@@ -73,17 +74,33 @@
 				>
 			{/if}
 		</div>
+		</FadeIn>
 
-		<h1
-			class="font-serif text-2xl leading-[1.2] font-medium tracking-tight text-ink-950 md:text-3xl lg:text-4xl dark:text-ink-50"
-		>
-			{$titleStore}
-		</h1>
+		<FadeIn y={12} delay={80} duration={700}>
+			<h1
+				class="article-title font-serif text-2xl leading-[1.2] font-medium tracking-tight text-ink-950 md:text-3xl lg:text-4xl dark:text-ink-50"
+			>
+				{$titleStore}
+			</h1>
+		</FadeIn>
 
+		<FadeIn y={10} delay={160} duration={650}>
 		<div class="flex flex-col gap-4">
 			<div
-				class="flex flex-wrap items-center gap-5 font-mono text-[9px] tracking-widest text-ink-400 uppercase"
+				class="article-meta-primary flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[9px] tracking-widest text-ink-400 uppercase"
 			>
+				<span class="flex items-center gap-1.5">
+					<Calendar size={12} />
+					{formatDateCN($createdAtStore)}{#if showUpdated}<span class="text-ink-400/70"
+							>（更新于 {formatDateCN($contentUpdatedAtStore)}）</span
+						>{/if}
+				</span>
+				<span class="flex items-center gap-1.5"
+					><Clock size={12} /> {formatReadingTime(readingTime)}</span
+				>
+			</div>
+
+			<div class="article-meta-secondary flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-ink-100 pt-3 font-mono text-[9px] tracking-widest text-ink-400 uppercase dark:border-ink-800">
 				{#if $isHotStore}
 					{#snippet hotIcon()}
 						<Icon icon="ph:fire-fill" class="size-4 text-red-500" />
@@ -96,32 +113,47 @@
 						热门
 					</Badge>
 				{/if}
-				<span class="flex items-center gap-1.5">
-					<Calendar size={12} />
-					{formatDateCN($createdAtStore)}{#if showUpdated}<span class="text-ink-400/70"
-							>（更新于 {formatDateCN($contentUpdatedAtStore)}）</span
-						>{/if}
-				</span>
-				<span class="flex items-center gap-1.5"
-					><Clock size={12} /> {formatReadingTime(readingTime)}</span
-				>
-				<span class="flex items-center gap-1.5"
-					>浏览 <RollingNumber value={$metricsStore?.views ?? 0} /></span
-				>
-				<span aria-hidden="true" class="opacity-40">·</span>
+				<span class="flex items-center gap-1.5">浏览 <RollingNumber value={$metricsStore?.views ?? 0} /></span>
 				<ContentLikeButton
 					contentType="article"
 					contentId={$postIdStore}
 					likes={$metricsStore?.likes ?? 0}
 					className="inline-flex items-center gap-1.5"
 				/>
-				<span aria-hidden="true" class="opacity-40">·</span>
-				<span class="flex items-center gap-1.5"
-					>评论 <RollingNumber value={$metricsStore?.comments ?? 0} /></span
-				>
+				<span class="flex items-center gap-1.5">评论 <RollingNumber value={$metricsStore?.comments ?? 0} /></span>
 			</div>
 
-			<TagList tags={$tagsStore} />
+			<div class="article-tags pt-1">
+				<TagList tags={$tagsStore} />
+			</div>
 		</div>
+		</FadeIn>
 	</div>
 </header>
+
+<style lang="postcss">
+	@reference "$routes/layout.css";
+
+	.article-title {
+		text-wrap: balance;
+	}
+
+	.article-meta-secondary :global(button),
+	.article-meta-secondary :global(a) {
+		transition:
+			color 180ms ease,
+			transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	.article-meta-secondary :global(button:hover),
+	.article-meta-secondary :global(a:hover) {
+		transform: translateY(-1px);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.article-meta-secondary :global(button),
+		.article-meta-secondary :global(a) {
+			transition: none;
+		}
+	}
+</style>

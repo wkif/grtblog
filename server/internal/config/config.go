@@ -16,6 +16,7 @@ type Config struct {
 	Redis     RedisConfig
 	GeoIP     GeoIPConfig
 	Storage   StorageConfig
+	Media     MediaConfig
 }
 
 // AppConfig contains Fiber specific settings.
@@ -96,6 +97,15 @@ type OSSConfig struct {
 	SecurityToken   string
 }
 
+// MediaConfig controls integrations used by media-record pages.
+type MediaConfig struct {
+	TMDBAPIKey       string
+	TMDBLanguage     string
+	TMDBBaseURL      string
+	TMDBImageBaseURL string
+	TMDBTimeout      time.Duration
+}
+
 // Load builds a Config struct with sane defaults overridden by environment variables.
 func Load() Config {
 	return Config{
@@ -166,6 +176,13 @@ func Load() Config {
 				AccessKeySecret: strings.TrimSpace(getEnv("OSS_ACCESS_KEY_SECRET", "")),
 				SecurityToken:   strings.TrimSpace(getEnv("OSS_SECURITY_TOKEN", "")),
 			},
+		},
+		Media: MediaConfig{
+			TMDBAPIKey:       strings.TrimSpace(getEnv("TMDB_API_KEY", "")),
+			TMDBLanguage:     strings.TrimSpace(getEnv("TMDB_LANGUAGE", "zh-CN")),
+			TMDBBaseURL:      strings.TrimRight(strings.TrimSpace(getEnv("TMDB_BASE_URL", "https://api.themoviedb.org/3")), "/"),
+			TMDBImageBaseURL: strings.TrimRight(strings.TrimSpace(getEnv("TMDB_IMAGE_BASE_URL", "https://image.tmdb.org/t/p/w780")), "/"),
+			TMDBTimeout:      getEnvAsDuration("TMDB_TIMEOUT", 20*time.Second),
 		},
 	}
 }

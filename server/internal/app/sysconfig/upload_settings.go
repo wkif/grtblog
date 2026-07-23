@@ -3,7 +3,9 @@ package sysconfig
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/grtsinry43/grtblog-v2/server/internal/config"
 	domainconfig "github.com/grtsinry43/grtblog-v2/server/internal/domain/config"
@@ -318,6 +320,7 @@ func (s *Service) builtinConfigByKey(key string) (domainconfig.SysConfig, bool) 
 
 func (s *Service) filteredBuiltinConfigs(keys []string) []domainconfig.SysConfig {
 	all := append(s.builtinUploadConfigs(), s.builtinStorageBackendConfigs()...)
+	all = append(all, s.builtinMediaConfigs()...)
 	if len(keys) == 0 {
 		return all
 	}
@@ -335,6 +338,59 @@ func (s *Service) filteredBuiltinConfigs(keys []string) []domainconfig.SysConfig
 		}
 	}
 	return filtered
+}
+
+func (s *Service) builtinMediaConfigs() []domainconfig.SysConfig {
+	passwordMeta := mustRawJSON(`{"inputType":"password"}`)
+	timeout := s.defaultMedia.TMDBTimeout
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+	return []domainconfig.SysConfig{
+		newBuiltinConfig(builtinConfigSpec{
+			Key:          mediaTMDBAPIKeyKey,
+			GroupPath:    "media/tmdb",
+			Label:        "TMDB API Key",
+			Description:  "用于搜索电影和电视剧信息。后台配置优先于环境变量 TMDB_API_KEY。",
+			DefaultValue: strings.TrimSpace(s.defaultMedia.TMDBAPIKey),
+			IsSensitive:  true,
+			Meta:         passwordMeta,
+			Sort:         10,
+		}),
+		newBuiltinConfig(builtinConfigSpec{
+			Key:          mediaTMDBLanguageKey,
+			GroupPath:    "media/tmdb",
+			Label:        "TMDB 语言",
+			Description:  "TMDB 搜索结果语言，例如 zh-CN 或 en-US。",
+			DefaultValue: strings.TrimSpace(s.defaultMedia.TMDBLanguage),
+			Sort:         20,
+		}),
+		newBuiltinConfig(builtinConfigSpec{
+			Key:          mediaTMDBBaseURLKey,
+			GroupPath:    "media/tmdb",
+			Label:        "API 地址",
+			Description:  "TMDB API 基地址。服务器无法直连 TMDB 时，可填写兼容的反向代理地址。",
+			DefaultValue: strings.TrimRight(strings.TrimSpace(s.defaultMedia.TMDBBaseURL), "/"),
+			Sort:         30,
+		}),
+		newBuiltinConfig(builtinConfigSpec{
+			Key:          mediaTMDBImageURLKey,
+			GroupPath:    "media/tmdb",
+			Label:        "图片地址",
+			Description:  "海报与背景图的访问基地址，可配置为图片代理地址。",
+			DefaultValue: strings.TrimRight(strings.TrimSpace(s.defaultMedia.TMDBImageBaseURL), "/"),
+			Sort:         40,
+		}),
+		newBuiltinConfig(builtinConfigSpec{
+			Key:          mediaTMDBTimeoutKey,
+			GroupPath:    "media/tmdb",
+			Label:        "请求超时（秒）",
+			Description:  "TMDB 搜索请求的最长等待时间，范围 1–120 秒。",
+			ValueType:    valueTypeNumber,
+			DefaultValue: strconv.Itoa(int(timeout.Seconds())),
+			Sort:         50,
+		}),
+	}
 }
 
 type builtinConfigSpec struct {

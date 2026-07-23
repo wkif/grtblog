@@ -20,10 +20,15 @@ type Service struct {
 	repo             domainconfig.SysConfigRepository
 	defaultTurnstile config.TurnstileConfig
 	defaultStorage   config.StorageConfig
+	defaultMedia     config.MediaConfig
 	events           appEvent.Bus
 }
 
 func NewService(repo domainconfig.SysConfigRepository, turnstileDefaults config.TurnstileConfig, storageDefaults config.StorageConfig, events appEvent.Bus) *Service {
+	return NewServiceWithMedia(repo, turnstileDefaults, storageDefaults, config.MediaConfig{}, events)
+}
+
+func NewServiceWithMedia(repo domainconfig.SysConfigRepository, turnstileDefaults config.TurnstileConfig, storageDefaults config.StorageConfig, mediaDefaults config.MediaConfig, events appEvent.Bus) *Service {
 	if events == nil {
 		events = appEvent.NopBus{}
 	}
@@ -31,6 +36,7 @@ func NewService(repo domainconfig.SysConfigRepository, turnstileDefaults config.
 		repo:             repo,
 		defaultTurnstile: turnstileDefaults,
 		defaultStorage:   storageDefaults,
+		defaultMedia:     mediaDefaults,
 		events:           events,
 	}
 }

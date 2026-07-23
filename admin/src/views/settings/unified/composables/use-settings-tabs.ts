@@ -7,6 +7,7 @@ import ApiTokensTab from '../components/tabs/ApiTokensTab.vue'
 import ContentTab from '../components/tabs/ContentTab.vue'
 import EmailTab from '../components/tabs/EmailTab.vue'
 import FederationTab from '../components/tabs/FederationTab.vue'
+import MediaTab from '../components/tabs/MediaTab.vue'
 import SecurityTab from '../components/tabs/SecurityTab.vue'
 import SiteInfoTab from '../components/tabs/SiteInfoTab.vue'
 import StorageTab from '../components/tabs/StorageTab.vue'
@@ -49,6 +50,7 @@ export const settingsTabs: SettingsTab[] = [
   { key: 'webhook', label: 'Webhook', icon: 'iconify ph--webhooks-logo', component: WebhookTab },
   { key: 'federation', label: '联合', icon: 'iconify ph--circles-three', component: FederationTab },
   { key: 'ai', label: 'AI', icon: 'iconify ph--robot', component: AiTab },
+  { key: 'media', label: '影视记录', icon: 'iconify ph--film-strip', component: MediaTab },
   { key: 'api-tokens', label: 'API Tokens', icon: 'iconify ph--key', component: ApiTokensTab },
   { key: 'telemetry', label: '遥测', icon: 'iconify ph--chart-line-up', component: TelemetryTab },
   { key: 'advanced', label: '高级', icon: 'iconify ph--gear', component: AdvancedTab },

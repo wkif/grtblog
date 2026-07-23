@@ -22,6 +22,8 @@ APP_PORT=8080 go run ./cmd/api
 
 Environment variables such as `APP_PORT`, `APP_ENV`, `DB_DRIVER`, `DB_DSN`, and `DB_AUTO_MIGRATE` can be set to customize behavior. Default database driver is SQLite for quick local usage. Switch to Postgres by setting `DB_DRIVER=postgres` and providing a valid `DB_DSN`.
 
+影视记录页面可通过 TMDB 搜索影视信息。推荐在后台“设置 → 影视记录”中配置 `TMDB API Key`、语言、API 地址、图片地址和请求超时；也可通过 `TMDB_API_KEY`、`TMDB_LANGUAGE`、`TMDB_BASE_URL`、`TMDB_IMAGE_BASE_URL`、`TMDB_TIMEOUT` 提供环境变量默认值。后台配置优先于环境变量，语言默认 `zh-CN`、请求超时默认 20 秒。服务器无法直连 TMDB 时，可将 API 地址和图片地址配置为可访问的反向代理地址。搜索结果会以快照形式写入影视记录，观看状态、进度、评分和备注由本站维护。
+
 ## Database migrations (Goose)
 
 Migrations live under `migrations/` and follow the `NNNN_description.sql` naming convention so that they work seamlessly with [Goose](https://github.com/pressly/goose).

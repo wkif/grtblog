@@ -10,6 +10,7 @@ import (
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/article"
 	appEvent "github.com/grtsinry43/grtblog-v2/server/internal/app/event"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/federation"
+	appmediarecord "github.com/grtsinry43/grtblog-v2/server/internal/app/mediarecord"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/moment"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/page"
 	"github.com/redis/go-redis/v9"
@@ -254,6 +255,22 @@ func RegisterAlbumSubscribers(bus appEvent.Bus, service *Service) {
 	register(appalbum.AlbumPublished{}.Name())
 	register(appalbum.AlbumUnpublished{}.Name())
 	register(appalbum.AlbumDeleted{}.Name())
+}
+
+func RegisterMediaRecordSubscribers(bus appEvent.Bus, service *Service) {
+	if bus == nil || service == nil {
+		return
+	}
+
+	register := func(eventName string) {
+		bus.Subscribe(eventName, handlerFunc(func(ctx context.Context, _ appEvent.Event) error {
+			return service.Invalidate(ctx, []string{"media-records:list"}, []string{"/media-records"})
+		}))
+	}
+
+	register(appmediarecord.MediaRecordCreated{}.Name())
+	register(appmediarecord.MediaRecordUpdated{}.Name())
+	register(appmediarecord.MediaRecordDeleted{}.Name())
 }
 
 func extractAlbumEventPayload(event appEvent.Event) (albumID int64, shortURL string) {
