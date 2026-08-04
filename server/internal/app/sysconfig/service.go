@@ -126,6 +126,44 @@ type CommentSettings struct {
 	RequireModeration bool
 }
 
+type MapSettings struct {
+	Provider      string
+	TiandituKey   string
+	TiandituLayer string
+}
+
+// MapSettings returns the browser-facing basemap configuration used by both
+// the admin coordinate picker and public map views.
+func (s *Service) MapSettings(ctx context.Context) (MapSettings, error) {
+	settings := MapSettings{
+		Provider:      "osm",
+		TiandituLayer: "vector",
+	}
+	for _, key := range []string{"map.provider", "map.tianditu.key", "map.tianditu.layer"} {
+		cfg, err := s.repo.GetByKey(ctx, key)
+		if err != nil {
+			if err == domainconfig.ErrSysConfigNotFound {
+				continue
+			}
+			return settings, fmt.Errorf("load %s: %w", key, err)
+		}
+		value := strings.TrimSpace(cfg.Value)
+		switch key {
+		case "map.provider":
+			if value == "tianditu" {
+				settings.Provider = value
+			}
+		case "map.tianditu.key":
+			settings.TiandituKey = value
+		case "map.tianditu.layer":
+			if value == "imagery" {
+				settings.TiandituLayer = value
+			}
+		}
+	}
+	return settings, nil
+}
+
 // CommentSettings 返回评论开关配置。
 // 约定 key：
 // - comment.disabled: 全站禁评

@@ -7,6 +7,7 @@ import ApiTokensTab from '../components/tabs/ApiTokensTab.vue'
 import ContentTab from '../components/tabs/ContentTab.vue'
 import EmailTab from '../components/tabs/EmailTab.vue'
 import FederationTab from '../components/tabs/FederationTab.vue'
+import MapTab from '../components/tabs/MapTab.vue'
 import MediaTab from '../components/tabs/MediaTab.vue'
 import SecurityTab from '../components/tabs/SecurityTab.vue'
 import SiteInfoTab from '../components/tabs/SiteInfoTab.vue'
@@ -37,6 +38,12 @@ export const settingsTabs: SettingsTab[] = [
     icon: 'iconify ph--paint-brush',
     component: ThemeExtendTab,
     fillHeight: true,
+  },
+  {
+    key: 'map',
+    label: '地图服务',
+    icon: 'iconify ph--map-trifold',
+    component: MapTab,
   },
   {
     key: 'security',

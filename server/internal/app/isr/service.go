@@ -214,6 +214,7 @@ func (s *Service) DiscoverRoutes(ctx context.Context) ([]string, error) {
 		"/albums",
 		"/friends",
 		"/friends-timeline",
+		"/footprints",
 		"/media-records",
 		"/moments",
 		"/tags",

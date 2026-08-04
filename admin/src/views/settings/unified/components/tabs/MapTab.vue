@@ -10,20 +10,9 @@ const emit = defineEmits<{ 'dirty-change': [dirty: boolean] }>()
   <ConfigPanel
     :list-fn="listSysConfigs"
     :update-fn="updateSysConfigs"
-    title="高级设置"
-    description="其他系统配置项"
-    :exclude-groups="[
-      'security/turnstile',
-      'interaction/comment',
-      'storage/upload',
-      'storage/provider',
-      'storage/oss',
-      'notification/email',
-      'webhook',
-      'site',
-      'map',
-    ]"
-    :exclude-root-item-keys="['article.hot']"
+    title="地图服务"
+    description="足迹地图的底图服务与访问凭证。"
+    :filter-groups="['map']"
     :on-dirty-change="(dirty: boolean) => emit('dirty-change', dirty)"
   />
 </template>

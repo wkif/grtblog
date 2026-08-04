@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_WATERMARK_CONTENT: string
   readonly VITE_API_BASE_URL?: string
   readonly VITE_API_PROXY_TARGET?: string
+  readonly VITE_NOMINATIM_BASE_URL?: string
+  readonly VITE_OSM_TILE_URL?: string
 }
 
 interface ImportMeta {

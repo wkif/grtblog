@@ -10,6 +10,7 @@ import (
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/article"
 	appEvent "github.com/grtsinry43/grtblog-v2/server/internal/app/event"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/federation"
+	appfootprint "github.com/grtsinry43/grtblog-v2/server/internal/app/footprint"
 	appmediarecord "github.com/grtsinry43/grtblog-v2/server/internal/app/mediarecord"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/moment"
 	"github.com/grtsinry43/grtblog-v2/server/internal/app/page"
@@ -271,6 +272,25 @@ func RegisterMediaRecordSubscribers(bus appEvent.Bus, service *Service) {
 	register(appmediarecord.MediaRecordCreated{}.Name())
 	register(appmediarecord.MediaRecordUpdated{}.Name())
 	register(appmediarecord.MediaRecordDeleted{}.Name())
+}
+
+func RegisterFootprintSubscribers(bus appEvent.Bus, service *Service) {
+	if bus == nil || service == nil {
+		return
+	}
+	register := func(eventName string) {
+		bus.Subscribe(eventName, handlerFunc(func(ctx context.Context, _ appEvent.Event) error {
+			return service.Invalidate(ctx, []string{"footprints:list"}, []string{"/footprints"})
+		}))
+	}
+	register(appfootprint.JourneyCreated{}.Name())
+	register(appfootprint.JourneyUpdated{}.Name())
+	register(appfootprint.JourneyDeleted{}.Name())
+	register(appalbum.AlbumCreated{}.Name())
+	register(appalbum.AlbumUpdated{}.Name())
+	register(appalbum.AlbumPublished{}.Name())
+	register(appalbum.AlbumUnpublished{}.Name())
+	register(appalbum.AlbumDeleted{}.Name())
 }
 
 func extractAlbumEventPayload(event appEvent.Event) (albumID int64, shortURL string) {
