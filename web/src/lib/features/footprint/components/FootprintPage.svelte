@@ -78,7 +78,7 @@
 	<meta name="description" content="记录到达过的城市、徒步里程、轨迹与旅途中的相册。" />
 </svelte:head>
 
-<div class="mx-auto w-full max-w-[1280px] px-3.5 py-8 sm:px-6 sm:py-14 md:py-16">
+<div class="mx-auto w-full max-w-[1500px] px-3.5 py-8 sm:px-6 sm:py-14 md:py-16">
 	<PageHeader
 		title="足迹"
 		tag="Footprints"
@@ -140,7 +140,7 @@
 			{/if}
 		</div>
 
-		<div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+		<div class="grid gap-6">
 			<FootprintMapShell
 				places={visiblePlaces}
 				mapSettings={overview.map}
@@ -148,7 +148,7 @@
 				onSelect={selectPlace}
 			/>
 			<aside
-				class="border border-ink-200/80 bg-ink-50 p-5 dark:border-ink-800 dark:bg-ink-900/50 lg:min-h-full"
+				class="border border-ink-200/80 bg-ink-50 p-5 dark:border-ink-800 dark:bg-ink-900/50"
 				aria-live="polite"
 			>
 				{#if selectedPlace}

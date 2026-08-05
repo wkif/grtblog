@@ -41,14 +41,14 @@
 	<LoadedMap {places} {mapSettings} {selectedSlug} {onSelect} />
 {:else if loadError}
 	<div
-		class="relative flex aspect-[16/8.5] min-h-72 items-center justify-center overflow-hidden border border-ink-200/80 bg-ink-100 dark:border-ink-800 dark:bg-ink-900"
+		class="relative flex aspect-[4/3] min-h-[360px] items-center justify-center overflow-hidden border border-ink-200/80 bg-ink-100 sm:aspect-[16/10] lg:h-[clamp(560px,64vh,680px)] lg:aspect-auto dark:border-ink-800 dark:bg-ink-900"
 		role="alert"
 	>
 		<p class="relative text-xs text-ink-500 dark:text-ink-400">地图加载失败，请刷新页面重试</p>
 	</div>
 {:else}
 	<div
-		class="relative flex aspect-[16/8.5] min-h-72 items-center justify-center overflow-hidden border border-ink-200/80 bg-ink-100 dark:border-ink-800 dark:bg-ink-900"
+		class="relative flex aspect-[4/3] min-h-[360px] items-center justify-center overflow-hidden border border-ink-200/80 bg-ink-100 sm:aspect-[16/10] lg:h-[clamp(560px,64vh,680px)] lg:aspect-auto dark:border-ink-800 dark:bg-ink-900"
 		aria-label="足迹地图加载中"
 	>
 		<div

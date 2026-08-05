@@ -194,7 +194,7 @@
 </script>
 
 <div
-	class="group/map relative aspect-[16/8.5] min-h-72 overflow-hidden border border-ink-200/80 bg-[#eef2ed] dark:border-ink-800 dark:bg-[#111916]"
+	class="group/map relative aspect-[4/3] min-h-[360px] overflow-hidden border border-ink-200/80 bg-[#eef2ed] sm:aspect-[16/10] lg:h-[clamp(560px,64vh,680px)] lg:aspect-auto dark:border-ink-800 dark:bg-[#111916]"
 >
 	<div bind:this={mapElement} class="map-host" aria-label="已到达城市分布地图"></div>
 
