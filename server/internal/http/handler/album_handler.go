@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -368,41 +370,25 @@ func (h *AlbumHandler) AddPhotos(c *fiber.Ctx) error {
 
 	cmds := make([]appalbum.CreatePhotoCmd, len(req.Photos))
 	for i, p := range req.Photos {
-		finalURL, err := h.mediaSvc.PromoteDraftURL(c.Context(), p.URL)
+		prepared, err := h.prepareAlbumMedia(c.Context(), albumMediaInput{
+			URL: p.URL, MediaType: p.MediaType, MimeType: p.MimeType, PosterURL: p.PosterURL,
+			DurationMS: p.DurationMS, Width: p.Width, Height: p.Height, Exif: p.Exif,
+		})
 		if err != nil {
-			return response.NewBizErrorWithCause(response.ServerError, "照片资源处理失败", err)
-		}
-		exifMap := map[string]any{}
-		if p.Exif != nil {
-			_ = json.Unmarshal([]byte(*p.Exif), &exifMap)
-		}
-
-		if h.mediaSvc != nil {
-			_, meta, extractedExif := h.mediaSvc.ExtractPhotoMetadataFromURL(finalURL)
-			mergeMissingExifFields(exifMap, extractedExif)
-			if meta != nil {
-				if _, ok := exifMap["imageWidth"]; !ok && meta.Width > 0 {
-					exifMap["imageWidth"] = meta.Width
-				}
-				if _, ok := exifMap["imageHeight"]; !ok && meta.Height > 0 {
-					exifMap["imageHeight"] = meta.Height
-				}
-				if _, ok := exifMap["dominantColor"]; !ok && meta.DominantColor != "" {
-					exifMap["dominantColor"] = meta.DominantColor
-				}
-			}
-		}
-
-		var exifBytes []byte
-		if len(exifMap) > 0 {
-			exifBytes, _ = json.Marshal(exifMap)
+			return response.NewBizErrorWithCause(response.ParamsError, "媒体资源处理失败", err)
 		}
 
 		cmds[i] = appalbum.CreatePhotoCmd{
-			URL:         finalURL,
+			URL:         prepared.URL,
+			MediaType:   prepared.MediaType,
+			MimeType:    prepared.MimeType,
+			PosterURL:   prepared.PosterURL,
+			DurationMS:  prepared.DurationMS,
+			Width:       prepared.Width,
+			Height:      prepared.Height,
 			Description: p.Description,
 			Caption:     p.Caption,
-			Exif:        exifBytes,
+			Exif:        prepared.Exif,
 			SortOrder:   p.SortOrder,
 		}
 	}
@@ -427,13 +413,13 @@ func (h *AlbumHandler) AddPhotos(c *fiber.Ctx) error {
 		"count":   len(photos),
 	})
 
-	return response.SuccessWithMessage(c, respPhotos, "照片添加成功")
+	return response.SuccessWithMessage(c, respPhotos, "媒体添加成功")
 }
 
 func (h *AlbumHandler) UpdatePhoto(c *fiber.Ctx) error {
 	photoID, err := strconv.ParseInt(c.Params("photoId"), 10, 64)
 	if err != nil {
-		return response.NewBizErrorWithMsg(response.ParamsError, "无效的照片ID")
+		return response.NewBizErrorWithMsg(response.ParamsError, "无效的媒体ID")
 	}
 
 	var req contract.UpdatePhotoReq
@@ -441,66 +427,51 @@ func (h *AlbumHandler) UpdatePhoto(c *fiber.Ctx) error {
 		return response.NewBizErrorWithCause(response.ParamsError, "请求体解析失败", err)
 	}
 
-	exifMap := map[string]any{}
-	if req.Exif != nil {
-		_ = json.Unmarshal([]byte(*req.Exif), &exifMap)
-	}
-	finalURL, err := h.mediaSvc.PromoteDraftURL(c.Context(), req.URL)
+	prepared, err := h.prepareAlbumMedia(c.Context(), albumMediaInput{
+		URL: req.URL, MediaType: req.MediaType, MimeType: req.MimeType, PosterURL: req.PosterURL,
+		DurationMS: req.DurationMS, Width: req.Width, Height: req.Height, Exif: req.Exif,
+	})
 	if err != nil {
-		return response.NewBizErrorWithCause(response.ServerError, "照片资源处理失败", err)
-	}
-	if h.mediaSvc != nil {
-		_, meta, extractedExif := h.mediaSvc.ExtractPhotoMetadataFromURL(finalURL)
-		mergeMissingExifFields(exifMap, extractedExif)
-		if meta != nil {
-			if _, ok := exifMap["imageWidth"]; !ok && meta.Width > 0 {
-				exifMap["imageWidth"] = meta.Width
-			}
-			if _, ok := exifMap["imageHeight"]; !ok && meta.Height > 0 {
-				exifMap["imageHeight"] = meta.Height
-			}
-			if _, ok := exifMap["dominantColor"]; !ok && meta.DominantColor != "" {
-				exifMap["dominantColor"] = meta.DominantColor
-			}
-		}
-	}
-
-	var exifBytes []byte
-	if len(exifMap) > 0 {
-		exifBytes, _ = json.Marshal(exifMap)
+		return response.NewBizErrorWithCause(response.ParamsError, "媒体资源处理失败", err)
 	}
 	updated, err := h.svc.UpdatePhoto(c.Context(), appalbum.UpdatePhotoCmd{
 		ID:          photoID,
-		URL:         finalURL,
+		URL:         prepared.URL,
+		MediaType:   prepared.MediaType,
+		MimeType:    prepared.MimeType,
+		PosterURL:   prepared.PosterURL,
+		DurationMS:  prepared.DurationMS,
+		Width:       prepared.Width,
+		Height:      prepared.Height,
 		Description: req.Description,
 		Caption:     req.Caption,
-		Exif:        exifBytes,
+		Exif:        prepared.Exif,
 		SortOrder:   req.SortOrder,
 	})
 	if err != nil {
 		if errors.Is(err, domainalbum.ErrPhotoNotFound) {
-			return response.NewBizErrorWithMsg(response.NotFound, "照片不存在")
+			return response.NewBizErrorWithMsg(response.NotFound, "媒体不存在")
 		}
 		return err
 	}
 
-	return response.SuccessWithMessage(c, h.mapPhotoResp(updated), "照片更新成功")
+	return response.SuccessWithMessage(c, h.mapPhotoResp(updated), "媒体更新成功")
 }
 
 func (h *AlbumHandler) DeletePhoto(c *fiber.Ctx) error {
 	photoID, err := strconv.ParseInt(c.Params("photoId"), 10, 64)
 	if err != nil {
-		return response.NewBizErrorWithMsg(response.ParamsError, "无效的照片ID")
+		return response.NewBizErrorWithMsg(response.ParamsError, "无效的媒体ID")
 	}
 
 	if err := h.svc.DeletePhoto(c.Context(), photoID); err != nil {
 		if errors.Is(err, domainalbum.ErrPhotoNotFound) {
-			return response.NewBizErrorWithMsg(response.NotFound, "照片不存在")
+			return response.NewBizErrorWithMsg(response.NotFound, "媒体不存在")
 		}
 		return err
 	}
 
-	return response.SuccessWithMessage[any](c, nil, "照片删除成功")
+	return response.SuccessWithMessage[any](c, nil, "媒体删除成功")
 }
 
 func (h *AlbumHandler) ReorderPhotos(c *fiber.Ctx) error {
@@ -526,7 +497,7 @@ func (h *AlbumHandler) ReorderPhotos(c *fiber.Ctx) error {
 		return err
 	}
 
-	return response.SuccessWithMessage[any](c, nil, "照片排序更新成功")
+	return response.SuccessWithMessage[any](c, nil, "媒体排序更新成功")
 }
 
 // GetAlbumMetrics godoc
@@ -629,10 +600,20 @@ func (h *AlbumHandler) mapPhotosResp(photos []*domainalbum.Photo) []contract.Pho
 }
 
 func (h *AlbumHandler) mapPhotoResp(p *domainalbum.Photo) contract.PhotoResp {
+	mediaType := normalizeAlbumMediaType(p.MediaType)
+	if mediaType == "" {
+		mediaType = domainalbum.MediaTypeImage
+	}
 	resp := contract.PhotoResp{
 		ID:          p.ID,
 		AlbumID:     p.AlbumID,
 		URL:         p.URL,
+		MediaType:   mediaType,
+		MimeType:    p.MimeType,
+		PosterURL:   p.PosterURL,
+		DurationMS:  p.DurationMS,
+		Width:       p.Width,
+		Height:      p.Height,
 		Description: p.Description,
 		Caption:     p.Caption,
 		SortOrder:   p.SortOrder,
@@ -642,11 +623,135 @@ func (h *AlbumHandler) mapPhotoResp(p *domainalbum.Photo) contract.PhotoResp {
 		raw := json.RawMessage(p.Exif)
 		resp.Exif = &raw
 	}
-	if h.mediaSvc != nil {
+	if h.mediaSvc != nil && mediaType != domainalbum.MediaTypeVideo {
 		resp.ThumbnailURL = h.mediaSvc.ThumbnailURLFor(p.URL)
 	}
 	return resp
 }
+
+type albumMediaInput struct {
+	URL        string
+	MediaType  string
+	MimeType   *string
+	PosterURL  *string
+	DurationMS *int64
+	Width      *int
+	Height     *int
+	Exif       *contract.JSONRaw
+}
+
+type preparedAlbumMedia struct {
+	URL        string
+	MediaType  string
+	MimeType   *string
+	PosterURL  *string
+	DurationMS *int64
+	Width      *int
+	Height     *int
+	Exif       []byte
+}
+
+func (h *AlbumHandler) prepareAlbumMedia(ctx context.Context, input albumMediaInput) (preparedAlbumMedia, error) {
+	requestedType := strings.TrimSpace(input.MediaType)
+	result := preparedAlbumMedia{
+		URL: input.URL, MediaType: normalizeAlbumMediaType(input.MediaType), MimeType: cleanStringPtr(input.MimeType),
+		DurationMS: input.DurationMS, Width: input.Width, Height: input.Height,
+	}
+	if requestedType != "" && result.MediaType == "" {
+		return preparedAlbumMedia{}, fmt.Errorf("不支持的媒体类型: %s", input.MediaType)
+	}
+	if h.mediaSvc != nil {
+		finalURL, err := h.mediaSvc.PromoteDraftURL(ctx, input.URL)
+		if err != nil {
+			return preparedAlbumMedia{}, err
+		}
+		result.URL = finalURL
+		info := h.mediaSvc.InspectPublicURL(ctx, finalURL)
+		if result.MediaType != "" && info.Type != "" && result.MediaType != info.Type {
+			return preparedAlbumMedia{}, fmt.Errorf("媒体类型与资源不匹配")
+		}
+		if result.MediaType == "" {
+			result.MediaType = info.Type
+		}
+		if result.MimeType == nil && info.MIMEType != "" {
+			result.MimeType = stringPtr(info.MIMEType)
+		}
+	}
+	if result.MediaType == "" {
+		result.MediaType = domainalbum.MediaTypeImage
+	}
+	if result.MediaType != domainalbum.MediaTypeImage && result.MediaType != domainalbum.MediaTypeVideo {
+		return preparedAlbumMedia{}, fmt.Errorf("无法识别媒体类型")
+	}
+
+	if input.PosterURL != nil && strings.TrimSpace(*input.PosterURL) != "" {
+		posterURL := strings.TrimSpace(*input.PosterURL)
+		if h.mediaSvc != nil {
+			promoted, err := h.mediaSvc.PromoteDraftURL(ctx, posterURL)
+			if err != nil {
+				return preparedAlbumMedia{}, err
+			}
+			posterURL = promoted
+		}
+		result.PosterURL = &posterURL
+	}
+
+	if result.MediaType == domainalbum.MediaTypeVideo {
+		return result, nil
+	}
+
+	exifMap := map[string]any{}
+	if input.Exif != nil {
+		_ = json.Unmarshal([]byte(*input.Exif), &exifMap)
+	}
+	if h.mediaSvc != nil {
+		_, meta, extractedExif := h.mediaSvc.ExtractPhotoMetadataFromURL(result.URL)
+		mergeMissingExifFields(exifMap, extractedExif)
+		if meta != nil {
+			if result.Width == nil && meta.Width > 0 {
+				result.Width = intPtr(meta.Width)
+			}
+			if result.Height == nil && meta.Height > 0 {
+				result.Height = intPtr(meta.Height)
+			}
+			if _, ok := exifMap["imageWidth"]; !ok && meta.Width > 0 {
+				exifMap["imageWidth"] = meta.Width
+			}
+			if _, ok := exifMap["imageHeight"]; !ok && meta.Height > 0 {
+				exifMap["imageHeight"] = meta.Height
+			}
+			if _, ok := exifMap["dominantColor"]; !ok && meta.DominantColor != "" {
+				exifMap["dominantColor"] = meta.DominantColor
+			}
+		}
+	}
+	if len(exifMap) > 0 {
+		result.Exif, _ = json.Marshal(exifMap)
+	}
+	return result, nil
+}
+
+func normalizeAlbumMediaType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case domainalbum.MediaTypeImage, "picture":
+		return domainalbum.MediaTypeImage
+	case domainalbum.MediaTypeVideo:
+		return domainalbum.MediaTypeVideo
+	default:
+		return ""
+	}
+}
+
+func cleanStringPtr(value *string) *string {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	return &trimmed
+}
+
+func stringPtr(value string) *string { return &value }
+func intPtr(value int) *int          { return &value }
 
 func mergeMissingExifFields(dst map[string]any, src map[string]any) {
 	if len(src) == 0 {

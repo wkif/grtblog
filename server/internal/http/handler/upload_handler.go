@@ -71,6 +71,7 @@ func (h *UploadHandler) UploadFile(c *fiber.Ctx) error {
 // @Produce json
 // @Param page query int false "页码" default(1)
 // @Param pageSize query int false "每页数量" default(10)
+// @Param type query string false "文件类型: picture|file|video"
 // @Success 200 {object} contract.UploadFileListRespEnvelope
 // @Security BearerAuth
 // @Router /uploads [get]
@@ -84,8 +85,12 @@ func (h *UploadHandler) ListUploads(c *fiber.Ctx) error {
 		pageSize = val
 	}
 
-	result, err := h.svc.List(c.Context(), page, pageSize)
+	fileType := strings.ToLower(strings.TrimSpace(c.Query("type")))
+	result, err := h.svc.List(c.Context(), page, pageSize, fileType)
 	if err != nil {
+		if errors.Is(err, media.ErrInvalidUploadType) {
+			return response.NewBizErrorWithMsg(response.ParamsError, "type 仅支持 picture、file、video 或 cache")
+		}
 		return response.NewBizErrorWithCause(response.ServerError, "获取文件列表失败", err)
 	}
 

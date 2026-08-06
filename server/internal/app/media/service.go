@@ -15,7 +15,9 @@ import (
 	"io/fs"
 	"log"
 	"math"
+	"mime"
 	"mime/multipart"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -89,6 +91,11 @@ type UploadResult struct {
 	Created      bool
 	ThumbnailURL string     // 缩略图公开路径（仅 picture 类型）
 	ImageMeta    *ImageMeta // 图片元信息（仅 picture 类型）
+}
+
+type PublicMediaInfo struct {
+	Type     string
+	MIMEType string
 }
 
 type SyncResult struct {
@@ -375,7 +382,7 @@ type ListResult struct {
 	Size  int
 }
 
-func (s *Service) List(ctx context.Context, page int, size int) (*ListResult, error) {
+func (s *Service) List(ctx context.Context, page int, size int, fileType string) (*ListResult, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -386,7 +393,11 @@ func (s *Service) List(ctx context.Context, page int, size int) (*ListResult, er
 		size = 100
 	}
 	offset := (page - 1) * size
-	items, total, err := s.repo.List(ctx, offset, size)
+	fileType = strings.ToLower(strings.TrimSpace(fileType))
+	if fileType != "" && fileType != "picture" && fileType != "video" && fileType != "file" && fileType != "cache" {
+		return nil, media.ErrInvalidUploadType
+	}
+	items, total, err := s.repo.List(ctx, offset, size, fileType)
 	if err != nil {
 		return nil, err
 	}
@@ -555,6 +566,34 @@ func (s *Service) PublicURL(storedPath string) string {
 		return ""
 	}
 	return backend.PublicURL(storedPath)
+}
+
+// InspectPublicURL 返回相册可用的媒体类型和 MIME。受管资源优先使用上传索引，外链回退到扩展名。
+func (s *Service) InspectPublicURL(ctx context.Context, publicURL string) PublicMediaInfo {
+	name := mediaNameFromURL(publicURL)
+	mediaType := detectTypeByName(name)
+	if storedPath, ok := s.storedPathFromPublicURL(ctx, publicURL); ok {
+		if record, err := s.repo.FindByPath(ctx, storedPath); err == nil && record != nil {
+			mediaType = record.Type
+			if strings.TrimSpace(record.Name) != "" {
+				name = record.Name
+			}
+		} else if detected := s.detectTypeByPath(storedPath); detected != "file" {
+			mediaType = detected
+		}
+	}
+
+	albumType := ""
+	switch mediaType {
+	case "picture":
+		albumType = "image"
+	case "video":
+		albumType = "video"
+	}
+	return PublicMediaInfo{
+		Type:     albumType,
+		MIMEType: mime.TypeByExtension(strings.ToLower(filepath.Ext(name))),
+	}
 }
 
 func (s *Service) OpenStoredFile(ctx context.Context, storedPath string) (io.ReadCloser, error) {
@@ -1096,6 +1135,14 @@ func detectTypeByName(name string) string {
 	default:
 		return "file"
 	}
+}
+
+func mediaNameFromURL(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if parsed, err := url.Parse(trimmed); err == nil && parsed.Path != "" {
+		return path.Base(parsed.Path)
+	}
+	return path.Base(trimmed)
 }
 
 func (s *Service) detectTypeByPath(storedPath string) string {

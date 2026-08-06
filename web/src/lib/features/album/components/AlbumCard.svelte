@@ -55,7 +55,7 @@
 		<div class="mt-3 flex items-center gap-3 text-[11px] text-white/40">
 			<span>{dateStr}</span>
 			<span class="h-px flex-1 bg-white/10"></span>
-			<span>{album.photoCount} 张</span>
+			<span>{album.photoCount} 项</span>
 		</div>
 	</div>
 

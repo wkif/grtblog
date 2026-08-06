@@ -22,6 +22,12 @@ type Photo struct {
 	ID          int64          `gorm:"column:id;primaryKey"`
 	AlbumID     *int64         `gorm:"column:album_id"`
 	URL         string         `gorm:"column:url;size:255;not null"`
+	MediaType   string         `gorm:"column:media_type;size:16;not null;default:image"`
+	MimeType    *string        `gorm:"column:mime_type;size:127"`
+	PosterURL   *string        `gorm:"column:poster_url;type:text"`
+	DurationMS  *int64         `gorm:"column:duration_ms"`
+	Width       *int           `gorm:"column:width"`
+	Height      *int           `gorm:"column:height"`
 	Description *string        `gorm:"column:description"`
 	Caption     *string        `gorm:"column:caption"`
 	Exif        []byte         `gorm:"column:exif;type:jsonb"`

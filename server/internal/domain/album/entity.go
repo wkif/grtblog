@@ -2,6 +2,11 @@ package album
 
 import "time"
 
+const (
+	MediaTypeImage = "image"
+	MediaTypeVideo = "video"
+)
+
 type Album struct {
 	ID          int64
 	Title       string
@@ -28,6 +33,12 @@ type Photo struct {
 	ID          int64
 	AlbumID     *int64
 	URL         string
+	MediaType   string
+	MimeType    *string
+	PosterURL   *string
+	DurationMS  *int64
+	Width       *int
+	Height      *int
 	Description *string
 	Caption     *string
 	Exif        []byte // JSONB: 完整 EXIF 数据（含 GPS、设备、色调等）

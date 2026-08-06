@@ -8103,6 +8103,12 @@
                         "description": "每页数量",
                         "name": "pageSize",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "文件类型: picture|file|video",
+                        "name": "type",
+                        "in": "query"
                     }
                 ],
                 "responses": {

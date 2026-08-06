@@ -40,6 +40,7 @@ export interface UploadSyncResponse {
 export interface ListUploadsParams {
   page?: number
   pageSize?: number
+  type?: Exclude<FileType, 'cache'>
 }
 
 export interface RenameFilePayload {
@@ -156,6 +157,9 @@ export function listUploads(params: ListUploadsParams = {}): Promise<UploadFileL
   }
   if (params.pageSize !== undefined) {
     query.pageSize = String(params.pageSize)
+  }
+  if (params.type) {
+    query.type = params.type
   }
 
   return request<UploadFileListResponse>('/uploads', {

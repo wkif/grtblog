@@ -14,7 +14,7 @@ export const load: PageServerLoad = async (event) => {
 	const photoId = Number(params.photoId);
 	const photoIndex = album.photos.findIndex((p) => p.id === photoId);
 	if (photoIndex === -1) {
-		error(404, '照片不存在');
+		error(404, '媒体不存在');
 	}
 
 	return {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
+	import AlbumVideoViewer from '$lib/features/album/components/AlbumVideoViewer.svelte';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import type { PageData } from './$types';
 
@@ -28,6 +29,7 @@
 
 	const album = $derived(data.album);
 	const photo = $derived(data.photo);
+	const isVideo = $derived(photo.mediaType === 'video');
 	const photoIndex = $derived(data.photoIndex);
 	const total = $derived(data.totalPhotos);
 	const mobileDateStr = $derived(
@@ -75,7 +77,7 @@
 				: 'max-height: 82vh; max-width: min(92vw, 1100px);'
 	);
 
-	let baseImgEl: HTMLImageElement;
+	let baseImgEl = $state<HTMLImageElement>();
 	let highResBlobUrl = $state<string | null>(null);
 	let thumbReady = $state(false);
 	let highResRendered = $state(false);
@@ -105,8 +107,8 @@
 	let ty = $state(0);
 	let isDragging = $state(false);
 	let dragStart = { x: 0, y: 0 };
-	let stageEl: HTMLDivElement;
-	let frameEl: HTMLDivElement;
+	let stageEl = $state<HTMLDivElement>();
+	let frameEl = $state<HTMLDivElement>();
 	const zoomPercent = $derived(Math.round(scale * 100));
 
 	// === React to photo changes ===
@@ -660,19 +662,23 @@
 				break;
 			case '+':
 			case '=':
+				if (isVideo) break;
 				e.preventDefault();
 				zoomIn();
 				break;
 			case '-':
+				if (isVideo) break;
 				e.preventDefault();
 				zoomOut();
 				break;
 			case '0':
+				if (isVideo) break;
 				e.preventDefault();
 				resetView();
 				break;
 			case 'r':
 			case 'R':
+				if (isVideo) break;
 				e.preventDefault();
 				rotateCW();
 				break;
@@ -732,51 +738,47 @@
 </script>
 
 <svelte:head>
-	<title>{photo.caption || album.title} — 照片</title>
-	<!-- Preload thumbnail so it's available instantly -->
-	<link rel="preload" as="image" href={thumbSrc} />
+	<title>{photo.caption || album.title} — {isVideo ? '视频' : '照片'}</title>
+	{#if !isVideo}
+		<!-- Preload thumbnail so it's available instantly -->
+		<link rel="preload" as="image" href={thumbSrc} />
+	{/if}
 </svelte:head>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div
-	class="photo-viewer fixed inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 flex flex-col overflow-y-auto bg-ink-950 md:inset-y-0 md:left-24 md:top-0 md:pl-0 lg:flex-row lg:overflow-hidden"
->
-	<!-- Image stage -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
+{#if isVideo}
+	<AlbumVideoViewer
+		{album}
+		item={photo}
+		index={photoIndex}
+		{total}
+		onBack={goBack}
+		onPrev={goPrev}
+		onNext={goNext}
+	/>
+{:else}
 	<div
-		bind:this={stageEl}
-		class="relative flex min-h-[58svh] w-full shrink-0 items-center justify-center overflow-hidden px-2.5 pb-[5.25rem] pt-[3.5rem] touch-none sm:min-h-[64svh] sm:px-4 sm:pb-24 sm:pt-20 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-visible"
-		class:cursor-grab={scale > 1 && !isDragging}
-		class:cursor-grabbing={isDragging}
-		onmousedown={handleMouseDown}
-		onclick={handleStageClick}
-		use:gestureAction
+		class="photo-viewer fixed inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+4.5rem)] z-40 flex flex-col overflow-y-auto bg-ink-950 md:inset-y-0 md:left-24 md:top-0 md:pl-0 lg:flex-row lg:overflow-hidden"
 	>
-		<!-- Back -->
-		<button
-			class="absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full border border-white/10 bg-ink-900/78 px-3 py-2 text-[11px] text-white/65 backdrop-blur-2xl transition-colors hover:text-white sm:left-4 sm:top-4 sm:rounded-[3px] sm:px-3 sm:py-1.5"
-			onclick={goBack}
+		<!-- Image stage -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div
+			bind:this={stageEl}
+			class="relative flex min-h-[58svh] w-full shrink-0 items-center justify-center overflow-hidden px-2.5 pb-[5.25rem] pt-[3.5rem] touch-none sm:min-h-[64svh] sm:px-4 sm:pb-24 sm:pt-20 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-visible"
+			class:cursor-grab={scale > 1 && !isDragging}
+			class:cursor-grabbing={isDragging}
+			onmousedown={handleMouseDown}
+			onclick={handleStageClick}
+			use:gestureAction
 		>
-			<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-				><path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="1.5"
-					d="M15 19l-7-7 7-7"
-				/></svg
-			>
-			返回
-		</button>
-		<!-- Nav prev -->
-		{#if photoIndex > 0}
+			<!-- Back -->
 			<button
-				aria-label="上一张"
-				class="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/12 bg-ink-950/78 p-2 text-white/72 shadow-[0_10px_30px_rgba(0,0,0,0.22)] backdrop-blur-md transition-all hover:border-jade-400/35 hover:bg-jade-500/14 hover:text-jade-200 sm:left-3 sm:p-2.5"
-				onclick={goPrev}
+				class="absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full border border-white/10 bg-ink-900/78 px-3 py-2 text-[11px] text-white/65 backdrop-blur-2xl transition-colors hover:text-white sm:left-4 sm:top-4 sm:rounded-[3px] sm:px-3 sm:py-1.5"
+				onclick={goBack}
 			>
-				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
 					><path
 						stroke-linecap="round"
 						stroke-linejoin="round"
@@ -784,238 +786,301 @@
 						d="M15 19l-7-7 7-7"
 					/></svg
 				>
+				返回
 			</button>
-		{/if}
-		<!-- Nav next -->
-		{#if photoIndex < total - 1}
-			<button
-				aria-label="下一张"
-				class="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/12 bg-ink-950/78 p-2 text-white/72 shadow-[0_10px_30px_rgba(0,0,0,0.22)] backdrop-blur-md transition-all hover:border-jade-400/35 hover:bg-jade-500/14 hover:text-jade-200 sm:right-3 sm:p-2.5"
-				onclick={goNext}
-			>
-				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-					><path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						d="M9 5l7 7-7 7"
-					/></svg
+			<!-- Nav prev -->
+			{#if photoIndex > 0}
+				<button
+					aria-label="上一张"
+					class="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/12 bg-ink-950/78 p-2 text-white/72 shadow-[0_10px_30px_rgba(0,0,0,0.22)] backdrop-blur-md transition-all hover:border-jade-400/35 hover:bg-jade-500/14 hover:text-jade-200 sm:left-3 sm:p-2.5"
+					onclick={goPrev}
 				>
-			</button>
-		{/if}
+					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+						><path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.5"
+							d="M15 19l-7-7 7-7"
+						/></svg
+					>
+				</button>
+			{/if}
+			<!-- Nav next -->
+			{#if photoIndex < total - 1}
+				<button
+					aria-label="下一张"
+					class="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/12 bg-ink-950/78 p-2 text-white/72 shadow-[0_10px_30px_rgba(0,0,0,0.22)] backdrop-blur-md transition-all hover:border-jade-400/35 hover:bg-jade-500/14 hover:text-jade-200 sm:right-3 sm:p-2.5"
+					onclick={goNext}
+				>
+					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+						><path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.5"
+							d="M9 5l7 7-7 7"
+						/></svg
+					>
+				</button>
+			{/if}
 
-		<!--
+			<!--
 			Image with explicit width/height from EXIF.
 			Browser computes intrinsic ratio from these attributes BEFORE image loads.
 			CSS max-* + object-contain lock the display size regardless of actual src resolution.
 			Thumbnail 1200px and original 4000px both render at identical visual size.
 		-->
-		{#if routeTransition && routeTransitionTarget}
-			<div class="viewer-route-preview" style={routeTransitionStyle}>
-				<img
-					src={routeTransition.src}
-					alt=""
-					class="h-full w-full object-cover"
-					draggable={false}
-				/>
-			</div>
-		{/if}
-		<div
-			class="relative"
-			style="transform: translate({tx}px, {ty}px) rotate({rotation}deg) scale({scale}); transition: transform {isDragging
-				? '0ms'
-				: '180ms'} cubic-bezier(0.4, 0, 0.2, 1);"
-		>
+			{#if routeTransition && routeTransitionTarget}
+				<div class="viewer-route-preview" style={routeTransitionStyle}>
+					<img
+						src={routeTransition.src}
+						alt=""
+						class="h-full w-full object-cover"
+						draggable={false}
+					/>
+				</div>
+			{/if}
 			<div
-				bind:this={frameEl}
-				class="viewer-photo-frame"
-				class:viewer-photo-frame-route-hidden={routeTransition !== null}
-				data-thumb-ready={thumbReady ? 'true' : 'false'}
-				data-original-ready={(hasDedicatedThumbnail ? highResRendered : thumbReady)
-					? 'true'
-					: 'false'}
-				style={viewerFrameStyle}
+				class="relative"
+				style="transform: translate({tx}px, {ty}px) rotate({rotation}deg) scale({scale}); transition: transform {isDragging
+					? '0ms'
+					: '180ms'} cubic-bezier(0.4, 0, 0.2, 1);"
 			>
 				<div
-					class="viewer-photo-backdrop"
-					style="background:
+					bind:this={frameEl}
+					class="viewer-photo-frame"
+					class:viewer-photo-frame-route-hidden={routeTransition !== null}
+					data-thumb-ready={thumbReady ? 'true' : 'false'}
+					data-original-ready={(hasDedicatedThumbnail ? highResRendered : thumbReady)
+						? 'true'
+						: 'false'}
+					style={viewerFrameStyle}
+				>
+					<div
+						class="viewer-photo-backdrop"
+						style="background:
 						radial-gradient(circle at 50% 26%, color-mix(in srgb, {dominantColor} 74%, white 26%) 0%, transparent 58%),
 						linear-gradient(180deg, color-mix(in srgb, {dominantColor} 88%, white 12%) 0%, {dominantColor} 100%);"
-				></div>
-				<img
-					bind:this={baseImgEl}
-					src={thumbSrc}
-					alt={photo.caption || ''}
-					class="viewer-photo-layer viewer-photo-thumb pointer-events-none select-none rounded-[3px] object-contain"
-					class:viewer-photo-layer-ready={thumbReady}
-					class:viewer-photo-layer-hidden={thumbFadeOut || hideBaseImage}
-					style={thumbLayerStyle}
-					draggable={false}
-					loading="eager"
-					decoding="sync"
-					fetchpriority="high"
-					onload={handleBaseImageLoad}
-				/>
-				{#if highResBlobUrl}
-					<img
-						src={highResBlobUrl}
-						alt={photo.caption || ''}
-						class="viewer-photo-layer viewer-photo-original pointer-events-none select-none rounded-[3px] object-contain"
-						class:viewer-photo-layer-ready={highResRendered}
-						style={originalLayerStyle}
-						draggable={false}
-						decoding="async"
-						onload={handleOriginalImageLoad}
-					/>
-				{/if}
-			</div>
-		</div>
-
-		<!-- Loading bubble (high-res progress) -->
-		{#if (hasDedicatedThumbnail && fetchingHighRes && !highResRendered) || (!hasDedicatedThumbnail && !thumbReady)}
-			<div
-				class="absolute bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl sm:bottom-8"
-			>
-				<div class="relative h-5 w-5 shrink-0">
-					<div class="absolute inset-0 rounded-full border-2 border-white/15"></div>
-					<div
-						class="absolute inset-0 animate-spin rounded-full border-2 border-jade-400 border-t-transparent"
 					></div>
-				</div>
-				<div class="flex min-w-[120px] flex-col">
-					<div class="mb-1 flex items-end justify-between">
-						<span class="text-[11px] font-medium tracking-wide text-white/80"
-							>{hasDedicatedThumbnail ? '加载原图' : '加载照片'}</span
-						>
-						<span class="font-mono text-[10px] text-jade-400"
-							>{totalBytes > 0 ? `${loadProgress}%` : '···'}</span
-						>
-					</div>
-					{#if totalBytes > 0}
-						<span class="mb-1 block font-mono text-[9px] text-white/35"
-							>{formatBytes(loadedBytes)} / {formatBytes(totalBytes)}</span
-						>
-					{:else if loadedBytes > 0}
-						<span class="mb-1 block font-mono text-[9px] text-white/35"
-							>已接收 {formatBytes(loadedBytes)}</span
-						>
+					<img
+						bind:this={baseImgEl}
+						src={thumbSrc}
+						alt={photo.caption || ''}
+						class="viewer-photo-layer viewer-photo-thumb pointer-events-none select-none rounded-[3px] object-contain"
+						class:viewer-photo-layer-ready={thumbReady}
+						class:viewer-photo-layer-hidden={thumbFadeOut || hideBaseImage}
+						style={thumbLayerStyle}
+						draggable={false}
+						loading="eager"
+						decoding="sync"
+						fetchpriority="high"
+						onload={handleBaseImageLoad}
+					/>
+					{#if highResBlobUrl}
+						<img
+							src={highResBlobUrl}
+							alt={photo.caption || ''}
+							class="viewer-photo-layer viewer-photo-original pointer-events-none select-none rounded-[3px] object-contain"
+							class:viewer-photo-layer-ready={highResRendered}
+							style={originalLayerStyle}
+							draggable={false}
+							decoding="async"
+							onload={handleOriginalImageLoad}
+						/>
 					{/if}
-					<div class="h-[3px] w-full overflow-hidden rounded-full bg-white/10">
+				</div>
+			</div>
+
+			<!-- Loading bubble (high-res progress) -->
+			{#if (hasDedicatedThumbnail && fetchingHighRes && !highResRendered) || (!hasDedicatedThumbnail && !thumbReady)}
+				<div
+					class="absolute bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl sm:bottom-8"
+				>
+					<div class="relative h-5 w-5 shrink-0">
+						<div class="absolute inset-0 rounded-full border-2 border-white/15"></div>
 						<div
-							class="h-full rounded-full bg-gradient-to-r from-jade-500 to-jade-400 transition-[width] duration-200 ease-out"
-							class:animate-pulse={totalBytes <= 0}
-							style="width: {totalBytes > 0 ? Math.max(loadProgress, 6) : 38}%"
+							class="absolute inset-0 animate-spin rounded-full border-2 border-jade-400 border-t-transparent"
 						></div>
 					</div>
+					<div class="flex min-w-[120px] flex-col">
+						<div class="mb-1 flex items-end justify-between">
+							<span class="text-[11px] font-medium tracking-wide text-white/80"
+								>{hasDedicatedThumbnail ? '加载原图' : '加载照片'}</span
+							>
+							<span class="font-mono text-[10px] text-jade-400"
+								>{totalBytes > 0 ? `${loadProgress}%` : '···'}</span
+							>
+						</div>
+						{#if totalBytes > 0}
+							<span class="mb-1 block font-mono text-[9px] text-white/35"
+								>{formatBytes(loadedBytes)} / {formatBytes(totalBytes)}</span
+							>
+						{:else if loadedBytes > 0}
+							<span class="mb-1 block font-mono text-[9px] text-white/35"
+								>已接收 {formatBytes(loadedBytes)}</span
+							>
+						{/if}
+						<div class="h-[3px] w-full overflow-hidden rounded-full bg-white/10">
+							<div
+								class="h-full rounded-full bg-gradient-to-r from-jade-500 to-jade-400 transition-[width] duration-200 ease-out"
+								class:animate-pulse={totalBytes <= 0}
+								style="width: {totalBytes > 0 ? Math.max(loadProgress, 6) : 38}%"
+							></div>
+						</div>
+					</div>
 				</div>
-			</div>
-		{/if}
+			{/if}
 
-		<!-- Toolbar -->
-		<div
-			class="absolute bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-10 flex w-[calc(100vw-1.25rem)] max-w-max -translate-x-1/2 items-center justify-center gap-0.5 rounded-full border border-white/8 bg-ink-900/78 px-2 py-1.5 backdrop-blur-2xl sm:bottom-4 sm:w-auto sm:rounded-[3px] sm:px-2.5 sm:py-1"
-		>
-			<button
-				class="rounded-[3px] p-1.5 text-white/40 transition-colors hover:bg-jade-500/12 hover:text-jade-300"
-				onclick={zoomOut}
-				title="缩小 (-)"
+			<!-- Toolbar -->
+			<div
+				class="absolute bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-10 flex w-[calc(100vw-1.25rem)] max-w-max -translate-x-1/2 items-center justify-center gap-0.5 rounded-full border border-white/8 bg-ink-900/78 px-2 py-1.5 backdrop-blur-2xl sm:bottom-4 sm:w-auto sm:rounded-[3px] sm:px-2.5 sm:py-1"
 			>
-				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-					><path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						d="M20 12H4"
-					/></svg
+				<button
+					class="rounded-[3px] p-1.5 text-white/40 transition-colors hover:bg-jade-500/12 hover:text-jade-300"
+					onclick={zoomOut}
+					title="缩小 (-)"
 				>
-			</button>
-			<button
-				class="min-w-[40px] px-1 text-center font-mono text-[11px] font-semibold text-white/50 transition-colors hover:text-white"
-				onclick={resetView}
-				title="重置 (0)">{zoomPercent}%</button
-			>
-			<button
-				class="rounded-[3px] p-1.5 text-white/40 transition-colors hover:bg-jade-500/12 hover:text-jade-300"
-				onclick={zoomIn}
-				title="放大 (+)"
-			>
-				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-					><path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						d="M12 4v16m8-8H4"
-					/></svg
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+						><path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.5"
+							d="M20 12H4"
+						/></svg
+					>
+				</button>
+				<button
+					class="min-w-[40px] px-1 text-center font-mono text-[11px] font-semibold text-white/50 transition-colors hover:text-white"
+					onclick={resetView}
+					title="重置 (0)">{zoomPercent}%</button
 				>
-			</button>
-			<div class="mx-1 h-4 w-px bg-white/10"></div>
-			<button
-				class="rounded-[3px] p-1.5 text-white/40 transition-colors hover:bg-jade-500/12 hover:text-jade-300"
-				onclick={rotateCW}
-				title="旋转 (R)"
-			>
-				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-					><path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"
-					/></svg
+				<button
+					class="rounded-[3px] p-1.5 text-white/40 transition-colors hover:bg-jade-500/12 hover:text-jade-300"
+					onclick={zoomIn}
+					title="放大 (+)"
 				>
-			</button>
-			<button
-				class="rounded-[3px] p-1.5 text-white/40 transition-colors hover:bg-jade-500/12 hover:text-jade-300"
-				onclick={resetView}
-				title="适合大小"
-			>
-				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-					><path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
-					/></svg
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+						><path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.5"
+							d="M12 4v16m8-8H4"
+						/></svg
+					>
+				</button>
+				<div class="mx-1 h-4 w-px bg-white/10"></div>
+				<button
+					class="rounded-[3px] p-1.5 text-white/40 transition-colors hover:bg-jade-500/12 hover:text-jade-300"
+					onclick={rotateCW}
+					title="旋转 (R)"
 				>
-			</button>
-			<div class="mx-1 h-4 w-px bg-white/10"></div>
-			<span class="px-1.5 font-mono text-[10px] tracking-widest text-white/25"
-				>{photoIndex + 1} / {total}</span
-			>
-		</div>
-	</div>
-
-	<section
-		class="noise-surface shrink-0 border-t border-white/8 bg-ink-950/88 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 backdrop-blur-xl backdrop-saturate-150 lg:hidden"
-	>
-		<div class="mx-auto w-full max-w-3xl">
-			<div class="flex items-start justify-between gap-4">
-				<div>
-					<p class="font-mono text-[10px] uppercase tracking-[0.22em] text-white/28">
-						Photo Details
-					</p>
-					<p class="mt-2 font-serif text-[1.05rem] leading-snug text-white/92">
-						{photo.caption || album.title}
-					</p>
-					{#if mobileDateStr}
-						<p class="mt-1 font-mono text-[10px] tracking-[0.16em] text-white/38">
-							{mobileDateStr}
-						</p>
-					{/if}
-				</div>
-				<span
-					class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[10px] tracking-[0.16em] text-white/38"
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+						><path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.5"
+							d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"
+						/></svg
+					>
+				</button>
+				<button
+					class="rounded-[3px] p-1.5 text-white/40 transition-colors hover:bg-jade-500/12 hover:text-jade-300"
+					onclick={resetView}
+					title="适合大小"
+				>
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+						><path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="1.5"
+							d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25"
+						/></svg
+					>
+				</button>
+				<div class="mx-1 h-4 w-px bg-white/10"></div>
+				<span class="px-1.5 font-mono text-[10px] tracking-widest text-white/25"
 					>{photoIndex + 1} / {total}</span
 				>
 			</div>
+		</div>
 
+		<section
+			class="noise-surface shrink-0 border-t border-white/8 bg-ink-950/88 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 backdrop-blur-xl backdrop-saturate-150 lg:hidden"
+		>
+			<div class="mx-auto w-full max-w-3xl">
+				<div class="flex items-start justify-between gap-4">
+					<div>
+						<p class="font-mono text-[10px] uppercase tracking-[0.22em] text-white/28">
+							Photo Details
+						</p>
+						<p class="mt-2 font-serif text-[1.05rem] leading-snug text-white/92">
+							{photo.caption || album.title}
+						</p>
+						{#if mobileDateStr}
+							<p class="mt-1 font-mono text-[10px] tracking-[0.16em] text-white/38">
+								{mobileDateStr}
+							</p>
+						{/if}
+					</div>
+					<span
+						class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[10px] tracking-[0.16em] text-white/38"
+						>{photoIndex + 1} / {total}</span
+					>
+				</div>
+
+				{#if photo.description}
+					<p class="mt-3 text-[13px] leading-relaxed text-white/62">{photo.description}</p>
+				{/if}
+
+				{#if exifRows.length > 0}
+					<div class="mt-4 grid grid-cols-1 gap-2.5 border-t border-white/6 pt-4">
+						{#each exifRows as row (`${row.icon}:${row.val}`)}
+							<div class="flex items-start gap-2.5 text-xs text-white/52">
+								<svg
+									class="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/20"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="1.5"
+										d={iconPaths[row.icon] || ''}
+									/>
+								</svg>
+								<span class={row.mono ? 'font-mono text-[11px]' : ''}>{row.val}</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<div
+					class="mt-4 flex items-center justify-between border-t border-white/6 pt-3 text-[10px] tracking-[0.18em] text-white/32"
+				>
+					<span>详细信息面板</span>
+					<a href="/albums/{album.shortUrl}" class="transition-colors hover:text-jade-300"
+						>返回相册</a
+					>
+				</div>
+			</div>
+		</section>
+
+		<!-- Side panel -->
+		<aside
+			class="photo-sidebar noise-surface relative z-20 hidden w-72 shrink-0 overflow-y-auto border-l border-white/8 bg-ink-950/90 p-5 backdrop-blur-xl backdrop-saturate-150 lg:block"
+		>
+			{#if photo.caption}
+				<p class="font-serif text-sm leading-relaxed text-white/90">{photo.caption}</p>
+			{/if}
 			{#if photo.description}
-				<p class="mt-3 text-[13px] leading-relaxed text-white/62">{photo.description}</p>
+				<p class="mt-2 text-xs leading-relaxed text-white/50">{photo.description}</p>
 			{/if}
 
 			{#if exifRows.length > 0}
-				<div class="mt-4 grid grid-cols-1 gap-2.5 border-t border-white/6 pt-4">
+				<div class="mt-5 space-y-3 border-t border-white/8 pt-5">
+					<h4 class="font-mono text-[10px] uppercase tracking-widest text-white/25">EXIF</h4>
 					{#each exifRows as row (`${row.icon}:${row.val}`)}
-						<div class="flex items-start gap-2.5 text-xs text-white/52">
+						<div class="flex items-start gap-2.5 text-xs text-white/50">
 							<svg
 								class="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/20"
 								fill="none"
@@ -1035,74 +1100,30 @@
 				</div>
 			{/if}
 
-			<div
-				class="mt-4 flex items-center justify-between border-t border-white/6 pt-3 text-[10px] tracking-[0.18em] text-white/32"
-			>
-				<span>详细信息面板</span>
-				<a href="/albums/{album.shortUrl}" class="transition-colors hover:text-jade-300">返回相册</a
+			<div class="mt-6 border-t border-white/5 pt-4">
+				<a
+					href="/albums/{album.shortUrl}"
+					class="text-xs text-white/30 transition-colors hover:text-jade-400">← {album.title}</a
 				>
 			</div>
-		</div>
-	</section>
-
-	<!-- Side panel -->
-	<aside
-		class="photo-sidebar noise-surface relative z-20 hidden w-72 shrink-0 overflow-y-auto border-l border-white/8 bg-ink-950/90 p-5 backdrop-blur-xl backdrop-saturate-150 lg:block"
-	>
-		{#if photo.caption}
-			<p class="font-serif text-sm leading-relaxed text-white/90">{photo.caption}</p>
-		{/if}
-		{#if photo.description}
-			<p class="mt-2 text-xs leading-relaxed text-white/50">{photo.description}</p>
-		{/if}
-
-		{#if exifRows.length > 0}
-			<div class="mt-5 space-y-3 border-t border-white/8 pt-5">
-				<h4 class="font-mono text-[10px] uppercase tracking-widest text-white/25">EXIF</h4>
-				{#each exifRows as row (`${row.icon}:${row.val}`)}
-					<div class="flex items-start gap-2.5 text-xs text-white/50">
-						<svg
-							class="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/20"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.5"
-								d={iconPaths[row.icon] || ''}
-							/>
-						</svg>
-						<span class={row.mono ? 'font-mono text-[11px]' : ''}>{row.val}</span>
-					</div>
-				{/each}
+			<div class="mt-4 grid grid-cols-2 gap-1.5 text-[10px] text-white/20">
+				<span
+					><kbd class="rounded bg-white/5 px-1">←</kbd><kbd class="ml-0.5 rounded bg-white/5 px-1"
+						>→</kbd
+					> 切换</span
+				>
+				<span
+					><kbd class="rounded bg-white/5 px-1">+</kbd><kbd class="ml-0.5 rounded bg-white/5 px-1"
+						>-</kbd
+					> 缩放</span
+				>
+				<span><kbd class="rounded bg-white/5 px-1">R</kbd> 旋转</span>
+				<span><kbd class="rounded bg-white/5 px-1">0</kbd> 重置</span>
+				<span><kbd class="rounded bg-white/5 px-1">Esc</kbd> 返回</span>
 			</div>
-		{/if}
-
-		<div class="mt-6 border-t border-white/5 pt-4">
-			<a
-				href="/albums/{album.shortUrl}"
-				class="text-xs text-white/30 transition-colors hover:text-jade-400">← {album.title}</a
-			>
-		</div>
-		<div class="mt-4 grid grid-cols-2 gap-1.5 text-[10px] text-white/20">
-			<span
-				><kbd class="rounded bg-white/5 px-1">←</kbd><kbd class="ml-0.5 rounded bg-white/5 px-1"
-					>→</kbd
-				> 切换</span
-			>
-			<span
-				><kbd class="rounded bg-white/5 px-1">+</kbd><kbd class="ml-0.5 rounded bg-white/5 px-1"
-					>-</kbd
-				> 缩放</span
-			>
-			<span><kbd class="rounded bg-white/5 px-1">R</kbd> 旋转</span>
-			<span><kbd class="rounded bg-white/5 px-1">0</kbd> 重置</span>
-			<span><kbd class="rounded bg-white/5 px-1">Esc</kbd> 返回</span>
-		</div>
-	</aside>
-</div>
+		</aside>
+	</div>
+{/if}
 
 <style>
 	.viewer-route-preview {

@@ -245,6 +245,12 @@ func (s *Service) AddPhoto(ctx context.Context, albumID int64, cmd CreatePhotoCm
 	p := &domainalbum.Photo{
 		AlbumID:     &albumID,
 		URL:         cmd.URL,
+		MediaType:   cmd.MediaType,
+		MimeType:    cmd.MimeType,
+		PosterURL:   cmd.PosterURL,
+		DurationMS:  cmd.DurationMS,
+		Width:       cmd.Width,
+		Height:      cmd.Height,
 		Description: cmd.Description,
 		Caption:     cmd.Caption,
 		Exif:        cmd.Exif,
@@ -267,6 +273,12 @@ func (s *Service) AddPhotos(ctx context.Context, cmd BatchCreatePhotosCmd) ([]*d
 		photos[i] = &domainalbum.Photo{
 			AlbumID:     &albumID,
 			URL:         c.URL,
+			MediaType:   c.MediaType,
+			MimeType:    c.MimeType,
+			PosterURL:   c.PosterURL,
+			DurationMS:  c.DurationMS,
+			Width:       c.Width,
+			Height:      c.Height,
 			Description: c.Description,
 			Caption:     c.Caption,
 			Exif:        c.Exif,
@@ -296,6 +308,12 @@ func (s *Service) UpdatePhoto(ctx context.Context, cmd UpdatePhotoCmd) (*domaina
 		return nil, err
 	}
 	existing.URL = cmd.URL
+	existing.MediaType = cmd.MediaType
+	existing.MimeType = cmd.MimeType
+	existing.PosterURL = cmd.PosterURL
+	existing.DurationMS = cmd.DurationMS
+	existing.Width = cmd.Width
+	existing.Height = cmd.Height
 	existing.Description = cmd.Description
 	existing.Caption = cmd.Caption
 	existing.Exif = cmd.Exif

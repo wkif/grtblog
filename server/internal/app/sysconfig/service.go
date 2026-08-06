@@ -221,13 +221,13 @@ func (s *Service) HotArticleThresholds(ctx context.Context) HotArticleThresholds
 	return t
 }
 
-// UploadMaxSizeBytes 返回上传文件的最大大小（字节），范围 1MB~50MB，默认 50MB。
+// UploadMaxSizeBytes 返回上传文件的最大大小（字节），范围 1MB~2048MB，默认 50MB。
 func (s *Service) UploadMaxSizeBytes(ctx context.Context) int {
 	const (
 		uploadKey     = "upload.maxSizeMB"
 		defaultSizeMB = 50
 		minSizeMB     = 1
-		maxSizeMB     = 50
+		maxSizeMB     = 2048
 	)
 
 	sizeMB := defaultSizeMB

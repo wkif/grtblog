@@ -174,7 +174,7 @@ func (s *Service) StorageSettingsWithOverrides(ctx context.Context, items []Upda
 
 func (s *Service) builtinUploadConfigs() []domainconfig.SysConfig {
 	return []domainconfig.SysConfig{
-		newStringBuiltinConfig(uploadMaxSizeKey, "storage/upload", "上传大小限制", "上传文件最大大小，单位 MB。", "50", 10),
+		newStringBuiltinConfig(uploadMaxSizeKey, "storage/upload", "上传大小限制", "上传文件最大大小，单位 MB；修改后需重启服务生效。", "50", 10),
 		newStringBuiltinConfig(uploadCacheDirKey, "storage/upload", "草稿缓存目录", "编辑阶段上传资源的临时目录，保存时会转正。", normalizeUploadManagedDir(s.defaultStorage.CacheDir, "blog/cache"), 20),
 		newStringBuiltinConfig(uploadImageDirKey, "storage/upload", "图片正式目录", "文章、页面、手记保存后，图片资源转入的目录。", normalizeUploadManagedDir(s.defaultStorage.ImageDir, "blog/images"), 30),
 		newStringBuiltinConfig(uploadVideoDirKey, "storage/upload", "视频正式目录", "保存后视频资源转入的目录。", normalizeUploadManagedDir(s.defaultStorage.VideoDir, "blog/video"), 40),

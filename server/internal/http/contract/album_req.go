@@ -69,6 +69,12 @@ type UpdateAlbumReq struct {
 // CreatePhotoReq 添加照片请求。
 type CreatePhotoReq struct {
 	URL         string   `json:"url" validate:"required"`
+	MediaType   string   `json:"mediaType,omitempty" validate:"omitempty,oneof=image video"`
+	MimeType    *string  `json:"mimeType,omitempty"`
+	PosterURL   *string  `json:"posterUrl,omitempty"`
+	DurationMS  *int64   `json:"durationMs,omitempty" validate:"omitempty,gte=0"`
+	Width       *int     `json:"width,omitempty" validate:"omitempty,gt=0"`
+	Height      *int     `json:"height,omitempty" validate:"omitempty,gt=0"`
 	Description *string  `json:"description,omitempty"`
 	Caption     *string  `json:"caption,omitempty"`
 	Exif        *JSONRaw `json:"exif,omitempty" swaggertype:"object"`
@@ -83,6 +89,12 @@ type BatchCreatePhotosReq struct {
 // UpdatePhotoReq 更新照片请求。
 type UpdatePhotoReq struct {
 	URL         string   `json:"url" validate:"required"`
+	MediaType   string   `json:"mediaType,omitempty" validate:"omitempty,oneof=image video"`
+	MimeType    *string  `json:"mimeType,omitempty"`
+	PosterURL   *string  `json:"posterUrl,omitempty"`
+	DurationMS  *int64   `json:"durationMs,omitempty" validate:"omitempty,gte=0"`
+	Width       *int     `json:"width,omitempty" validate:"omitempty,gt=0"`
+	Height      *int     `json:"height,omitempty" validate:"omitempty,gt=0"`
 	Description *string  `json:"description,omitempty"`
 	Caption     *string  `json:"caption,omitempty"`
 	Exif        *JSONRaw `json:"exif,omitempty" swaggertype:"object"`

@@ -12,7 +12,7 @@ import {
   reorderPhotos,
 } from '@/services/albums'
 
-import type { PhotoItem, CreatePhotoPayload, PhotoExif } from '@/services/albums'
+import type { PhotoItem, CreatePhotoPayload } from '@/services/albums'
 
 export function useAlbumForm() {
   const route = useRoute()
@@ -98,19 +98,25 @@ export function useAlbumForm() {
     }
   }
 
-  async function uploadPhotos(items: { url: string; exif?: PhotoExif | null }[]) {
+  async function uploadPhotos(items: Omit<CreatePhotoPayload, 'sortOrder'>[]) {
     if (!isEdit.value || items.length === 0) return
     const payloads: CreatePhotoPayload[] = items.map((item, i) => ({
       url: item.url,
+      mediaType: item.mediaType,
+      mimeType: item.mimeType ?? null,
+      posterUrl: item.posterUrl ?? null,
+      durationMs: item.durationMs ?? null,
+      width: item.width ?? null,
+      height: item.height ?? null,
       exif: item.exif ?? null,
       sortOrder: photos.value.length + i,
     }))
     try {
       await addPhotos(albumId.value, { photos: payloads })
-      message.success(`已添加 ${items.length} 张照片`)
+      message.success(`已添加 ${items.length} 项媒体`)
       await fetch()
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '添加照片失败')
+      message.error(err instanceof Error ? err.message : '添加媒体失败')
     }
   }
 
@@ -121,15 +127,21 @@ export function useAlbumForm() {
     try {
       await updatePhotoApi(albumId.value, photoId, {
         url: data.url ?? existing.url,
+        mediaType: data.mediaType ?? existing.mediaType,
+        mimeType: data.mimeType ?? existing.mimeType ?? null,
+        posterUrl: data.posterUrl ?? existing.posterUrl ?? null,
+        durationMs: data.durationMs ?? existing.durationMs ?? null,
+        width: data.width ?? existing.width ?? null,
+        height: data.height ?? existing.height ?? null,
         description: data.description ?? existing.description ?? null,
         caption: data.caption ?? existing.caption ?? null,
         exif: data.exif ?? existing.exif ?? null,
         sortOrder: data.sortOrder ?? existing.sortOrder,
       })
-      message.success('照片已更新')
+      message.success('媒体已更新')
       await fetch()
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '更新照片失败')
+      message.error(err instanceof Error ? err.message : '更新媒体失败')
     }
   }
 
@@ -137,10 +149,10 @@ export function useAlbumForm() {
     if (!isEdit.value) return
     try {
       await deletePhotoApi(albumId.value, photoId)
-      message.success('照片已删除')
+      message.success('媒体已删除')
       await fetch()
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '删除照片失败')
+      message.error(err instanceof Error ? err.message : '删除媒体失败')
     }
   }
 

@@ -27,6 +27,12 @@ type UpdateAlbumCmd struct {
 // CreatePhotoCmd 添加照片命令。
 type CreatePhotoCmd struct {
 	URL         string
+	MediaType   string
+	MimeType    *string
+	PosterURL   *string
+	DurationMS  *int64
+	Width       *int
+	Height      *int
 	Description *string
 	Caption     *string
 	Exif        []byte
@@ -37,6 +43,12 @@ type CreatePhotoCmd struct {
 type UpdatePhotoCmd struct {
 	ID          int64
 	URL         string
+	MediaType   string
+	MimeType    *string
+	PosterURL   *string
+	DurationMS  *int64
+	Width       *int
+	Height      *int
 	Description *string
 	Caption     *string
 	Exif        []byte

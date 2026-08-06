@@ -51,7 +51,13 @@ type PhotoResp struct {
 	ID           int64            `json:"id"`
 	AlbumID      *int64           `json:"albumId,omitempty"`
 	URL          string           `json:"url"`
+	MediaType    string           `json:"mediaType"`
+	MimeType     *string          `json:"mimeType,omitempty"`
+	PosterURL    *string          `json:"posterUrl,omitempty"`
 	ThumbnailURL string           `json:"thumbnailUrl,omitempty"`
+	DurationMS   *int64           `json:"durationMs,omitempty"`
+	Width        *int             `json:"width,omitempty"`
+	Height       *int             `json:"height,omitempty"`
 	Description  *string          `json:"description,omitempty"`
 	Caption      *string          `json:"caption,omitempty"`
 	Exif         *json.RawMessage `json:"exif,omitempty"`

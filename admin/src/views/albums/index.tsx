@@ -124,7 +124,7 @@ export default defineComponent({
         },
       },
       {
-        title: '照片数',
+        title: '媒体数',
         key: 'photoCount',
         width: 80,
         align: 'center',

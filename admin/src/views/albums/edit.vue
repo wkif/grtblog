@@ -8,24 +8,29 @@ import {
   NEmpty,
   NForm,
   NFormItem,
-  NImage,
   NInput,
   NModal,
-  NPopconfirm,
   NSpace,
   NSpin,
   NSwitch,
   NTag,
   NTooltip,
+  useMessage,
 } from 'naive-ui'
 import { ref, watch } from 'vue'
 
 import { ScrollContainer } from '@/components'
 import ImageInput from '@/components/image-picker/ImageInput.vue'
-import ImagePickerModal from '@/components/image-picker/ImagePickerModal.vue'
 import { uploadFile } from '@/services/uploads'
 
+import AlbumMediaCard from './components/AlbumMediaCard.vue'
+import MediaPickerModal from './components/MediaPickerModal.vue'
 import { useAlbumForm } from './composables/useAlbumForm'
+import {
+  extractRemoteVideoMetadata,
+  extractVideoMetadata,
+  formatMediaDuration,
+} from './composables/useMediaUtils'
 import {
   extractExif,
   exifDevice,
@@ -33,7 +38,8 @@ import {
   exifLocation,
 } from './composables/usePhotoUtils'
 
-import type { PhotoItem } from '@/services/albums'
+import type { CreatePhotoPayload, PhotoItem } from '@/services/albums'
+import type { UploadFileResponse } from '@/services/uploads'
 
 const {
   isEdit,
@@ -50,13 +56,15 @@ const {
 } = useAlbumForm()
 
 const uploading = ref(false)
+const message = useMessage()
 const showMeta = ref(false)
-const showPhotoPicker = ref(false)
+const showMediaPicker = ref(false)
 const editingPhoto = ref<PhotoItem | null>(null)
 const showPhotoModal = ref(false)
 const photoForm = ref({
   description: '',
   caption: '',
+  posterUrl: '',
 })
 watch(
   () => [
@@ -71,32 +79,92 @@ watch(
   { deep: true },
 )
 
-async function handlePhotoUpload(e: Event) {
+async function handleMediaUpload(e: Event) {
   const input = e.target as HTMLInputElement
   if (!input.files?.length) return
   uploading.value = true
   try {
-    const items: { url: string; exif?: Record<string, unknown> | null }[] = []
+    const items: Omit<CreatePhotoPayload, 'sortOrder'>[] = []
     for (const file of Array.from(input.files)) {
-      const [res, exif] = await Promise.all([uploadFile(file, 'cache'), extractExif(file)])
-      // Merge backend imageMeta (width/height/dominantColor) into exif
-      const merged = { ...(exif || {}) }
-      if (res.imageMeta) {
-        if (res.imageMeta.width) merged.imageWidth = res.imageMeta.width
-        if (res.imageMeta.height) merged.imageHeight = res.imageMeta.height
-        if (res.imageMeta.dominantColor) merged.dominantColor = res.imageMeta.dominantColor
+      const res = await uploadFile(file, 'cache')
+      if (res.type === 'video') {
+        const metadata = await extractVideoMetadata(file)
+        let posterUrl: string | null = null
+        if (metadata.poster) {
+          posterUrl = (await uploadFile(metadata.poster, 'cache')).publicUrl
+        }
+        items.push({
+          url: res.publicUrl,
+          mediaType: 'video',
+          mimeType: file.type || null,
+          posterUrl,
+          durationMs: metadata.durationMs,
+          width: metadata.width,
+          height: metadata.height,
+          exif: null,
+        })
+        continue
       }
-      items.push({ url: res.publicUrl, exif: Object.keys(merged).length ? merged : null })
+
+      const exif = await extractExif(file)
+      const merged = { ...(exif || {}) }
+      if (res.imageMeta?.width) merged.imageWidth = res.imageMeta.width
+      if (res.imageMeta?.height) merged.imageHeight = res.imageMeta.height
+      if (res.imageMeta?.dominantColor) merged.dominantColor = res.imageMeta.dominantColor
+      items.push({
+        url: res.publicUrl,
+        mediaType: 'image',
+        mimeType: file.type || null,
+        width: res.imageMeta?.width ?? null,
+        height: res.imageMeta?.height ?? null,
+        exif: Object.keys(merged).length ? merged : null,
+      })
     }
     await uploadPhotos(items)
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '媒体上传失败')
   } finally {
     uploading.value = false
     input.value = ''
   }
 }
 
-async function handlePickFromGallery(url: string) {
-  await uploadPhotos([{ url }])
+async function handlePickFromGallery(item: UploadFileResponse) {
+  if (item.type === 'picture') {
+    await uploadPhotos([
+      {
+        url: item.publicUrl,
+        mediaType: 'image',
+        width: item.imageMeta?.width ?? null,
+        height: item.imageMeta?.height ?? null,
+        exif: item.imageMeta
+          ? {
+              imageWidth: item.imageMeta.width,
+              imageHeight: item.imageMeta.height,
+              dominantColor: item.imageMeta.dominantColor,
+            }
+          : null,
+      },
+    ])
+    return
+  }
+
+  let durationMs: number | null = null
+  let width: number | null = null
+  let height: number | null = null
+  let posterUrl: string | null = null
+  try {
+    const metadata = await extractRemoteVideoMetadata(item.publicUrl)
+    durationMs = metadata.durationMs
+    width = metadata.width
+    height = metadata.height
+    if (metadata.poster) posterUrl = (await uploadFile(metadata.poster, 'cache')).publicUrl
+  } catch {
+    message.warning('已添加视频，但浏览器未能自动生成封面，可在媒体信息中手动选择')
+  }
+  await uploadPhotos([
+    { url: item.publicUrl, mediaType: 'video', durationMs, width, height, posterUrl },
+  ])
 }
 
 function openPhotoEdit(photo: PhotoItem) {
@@ -104,6 +172,7 @@ function openPhotoEdit(photo: PhotoItem) {
   photoForm.value = {
     description: photo.description ?? '',
     caption: photo.caption ?? '',
+    posterUrl: photo.posterUrl ?? '',
   }
   showPhotoModal.value = true
 }
@@ -113,7 +182,8 @@ async function savePhotoEdit() {
   await updatePhoto(editingPhoto.value.id, {
     description: photoForm.value.description || null,
     caption: photoForm.value.caption || null,
-  } as any)
+    posterUrl: photoForm.value.posterUrl || null,
+  })
   showPhotoModal.value = false
 }
 
@@ -126,10 +196,6 @@ function movePhoto(index: number, direction: -1 | 1) {
   ids[index] = b
   ids[targetIndex] = a
   handleReorder(ids)
-}
-
-function thumbUrl(photo: PhotoItem): string {
-  return photo.thumbnailUrl || photo.url
 }
 </script>
 
@@ -223,7 +289,7 @@ function thumbUrl(photo: PhotoItem): string {
         <div class="mb-4 flex shrink-0 items-center justify-between">
           <div class="flex items-center gap-2">
             <div class="iconify text-lg opacity-50 ph--images" />
-            <span class="text-sm font-medium">照片</span>
+            <span class="text-sm font-medium">媒体</span>
             <NTag
               v-if="photos.length > 0"
               size="small"
@@ -240,10 +306,10 @@ function thumbUrl(photo: PhotoItem): string {
             <NButton
               size="small"
               quaternary
-              @click="showPhotoPicker = true"
+              @click="showMediaPicker = true"
             >
               <template #icon><div class="iconify ph--folder-open" /></template>
-              图库
+              媒体库
             </NButton>
             <NButton
               size="small"
@@ -255,10 +321,10 @@ function thumbUrl(photo: PhotoItem): string {
               上传
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 multiple
                 style="display: none"
-                @change="handlePhotoUpload"
+                @change="handleMediaUpload"
               />
             </NButton>
           </NSpace>
@@ -266,12 +332,12 @@ function thumbUrl(photo: PhotoItem): string {
 
         <NEmpty
           v-if="!isEdit"
-          description="请先创建相册，再添加照片"
+          description="请先创建相册，再添加媒体"
           class="py-16"
         />
         <NEmpty
           v-else-if="photos.length === 0"
-          description="点击上方按钮添加照片"
+          description="点击上方按钮添加图片或视频"
           class="py-16"
         >
           <template #icon>
@@ -288,98 +354,17 @@ function thumbUrl(photo: PhotoItem): string {
             wrapper-class="!p-0 !pr-1"
           >
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              <div
+              <AlbumMediaCard
                 v-for="(photo, index) in photos"
                 :key="photo.id"
-                class="group overflow-hidden rounded-lg border border-current/5 transition-all hover:border-current/15 hover:shadow-sm"
-              >
-                <div class="relative aspect-square overflow-hidden bg-current/3">
-                  <NImage
-                    :src="thumbUrl(photo)"
-                    :preview-src="photo.url"
-                    object-fit="cover"
-                    :img-props="{ class: 'h-full w-full object-cover' }"
-                    class="h-full w-full"
-                  />
-                  <div
-                    class="absolute top-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/50 text-[10px] font-medium text-white"
-                  >
-                    {{ index + 1 }}
-                  </div>
-                </div>
-
-                <div class="px-2.5 py-2">
-                  <div
-                    class="min-h-[1.25rem] cursor-pointer truncate text-xs opacity-60"
-                    @click="openPhotoEdit(photo)"
-                  >
-                    <template v-if="photo.caption">{{ photo.caption }}</template>
-                    <template v-else-if="exifDevice(photo.exif)">{{
-                      exifDevice(photo.exif)
-                    }}</template>
-                    <template v-else><span class="italic opacity-40">点击编辑信息</span></template>
-                  </div>
-
-                  <div class="mt-1.5 flex items-center justify-between">
-                    <NSpace :size="2">
-                      <NTooltip>
-                        <template #trigger>
-                          <NButton
-                            quaternary
-                            circle
-                            size="tiny"
-                            :disabled="index === 0"
-                            @click="movePhoto(index, -1)"
-                          >
-                            <template #icon><div class="iconify ph--caret-left" /></template>
-                          </NButton>
-                        </template>
-                        前移
-                      </NTooltip>
-                      <NTooltip>
-                        <template #trigger>
-                          <NButton
-                            quaternary
-                            circle
-                            size="tiny"
-                            :disabled="index === photos.length - 1"
-                            @click="movePhoto(index, 1)"
-                          >
-                            <template #icon><div class="iconify ph--caret-right" /></template>
-                          </NButton>
-                        </template>
-                        后移
-                      </NTooltip>
-                      <NTooltip>
-                        <template #trigger>
-                          <NButton
-                            quaternary
-                            circle
-                            size="tiny"
-                            @click="openPhotoEdit(photo)"
-                          >
-                            <template #icon><div class="iconify ph--pencil-simple" /></template>
-                          </NButton>
-                        </template>
-                        编辑
-                      </NTooltip>
-                    </NSpace>
-                    <NPopconfirm @positive-click="deletePhoto(photo.id)">
-                      <template #trigger>
-                        <NButton
-                          quaternary
-                          circle
-                          size="tiny"
-                          type="error"
-                        >
-                          <template #icon><div class="iconify ph--trash" /></template>
-                        </NButton>
-                      </template>
-                      确定删除这张照片？
-                    </NPopconfirm>
-                  </div>
-                </div>
-              </div>
+                :item="photo"
+                :index="index"
+                :total="photos.length"
+                :subtitle="photo.mediaType === 'image' ? exifDevice(photo.exif) : '视频'"
+                @edit="openPhotoEdit(photo)"
+                @delete="deletePhoto(photo.id)"
+                @move="movePhoto(index, $event)"
+              />
             </div>
           </ScrollContainer>
         </div>
@@ -430,12 +415,12 @@ function thumbUrl(photo: PhotoItem): string {
     <NModal
       v-model:show="showPhotoModal"
       preset="card"
-      title="编辑照片信息"
+      title="编辑媒体信息"
       style="width: 520px; max-width: 90vw"
     >
       <div class="flex flex-col gap-4">
         <div
-          v-if="editingPhoto?.exif"
+          v-if="editingPhoto?.mediaType === 'image' && editingPhoto.exif"
           class="rounded-lg bg-current/3 p-3 text-xs"
         >
           <div class="mb-2 flex items-center gap-1.5 text-sm font-medium opacity-70">
@@ -475,6 +460,25 @@ function thumbUrl(photo: PhotoItem): string {
           </div>
         </div>
 
+        <div
+          v-if="editingPhoto?.mediaType === 'video'"
+          class="grid grid-cols-2 gap-2 rounded-lg bg-current/3 p-3 text-xs opacity-70"
+        >
+          <div><span class="opacity-50">类型</span> {{ editingPhoto.mimeType || 'video' }}</div>
+          <div>
+            <span class="opacity-50">时长</span>
+            {{ formatMediaDuration(editingPhoto.durationMs) || '-' }}
+          </div>
+          <div class="col-span-2">
+            <span class="opacity-50">尺寸</span>
+            {{
+              editingPhoto.width && editingPhoto.height
+                ? `${editingPhoto.width} × ${editingPhoto.height}`
+                : '-'
+            }}
+          </div>
+        </div>
+
         <NForm
           label-placement="top"
           :show-feedback="false"
@@ -483,8 +487,14 @@ function thumbUrl(photo: PhotoItem): string {
           <NFormItem label="说明文字">
             <NInput
               v-model:value="photoForm.caption"
-              placeholder="给照片加一句话..."
+              placeholder="给这项媒体加一句话..."
             />
+          </NFormItem>
+          <NFormItem
+            v-if="editingPhoto?.mediaType === 'video'"
+            label="视频封面"
+          >
+            <ImageInput v-model:value="photoForm.posterUrl" />
           </NFormItem>
           <NFormItem label="详细描述">
             <NInput
@@ -510,8 +520,8 @@ function thumbUrl(photo: PhotoItem): string {
       </template>
     </NModal>
 
-    <ImagePickerModal
-      v-model:show="showPhotoPicker"
+    <MediaPickerModal
+      v-model:show="showMediaPicker"
       @select="handlePickFromGallery"
     />
   </div>

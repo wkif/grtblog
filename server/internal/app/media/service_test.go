@@ -526,16 +526,22 @@ func (r *memoryRepo) UpdateName(_ context.Context, id int64, name string) error 
 	return domainmedia.ErrUploadFileNotFound
 }
 
-func (r *memoryRepo) List(_ context.Context, offset int, limit int) ([]domainmedia.UploadFile, int64, error) {
-	if offset > len(r.files) {
-		return nil, int64(len(r.files)), nil
+func (r *memoryRepo) List(_ context.Context, offset int, limit int, fileType string) ([]domainmedia.UploadFile, int64, error) {
+	filtered := make([]domainmedia.UploadFile, 0, len(r.files))
+	for _, file := range r.files {
+		if fileType == "" || file.Type == fileType {
+			filtered = append(filtered, file)
+		}
+	}
+	if offset > len(filtered) {
+		return nil, int64(len(filtered)), nil
 	}
 	end := offset + limit
-	if end > len(r.files) {
-		end = len(r.files)
+	if end > len(filtered) {
+		end = len(filtered)
 	}
-	items := append([]domainmedia.UploadFile(nil), r.files[offset:end]...)
-	return items, int64(len(r.files)), nil
+	items := append([]domainmedia.UploadFile(nil), filtered[offset:end]...)
+	return items, int64(len(filtered)), nil
 }
 
 func (r *memoryRepo) ListAll(_ context.Context) ([]domainmedia.UploadFile, error) {

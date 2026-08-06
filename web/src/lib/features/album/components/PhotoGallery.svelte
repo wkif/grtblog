@@ -8,6 +8,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import type { PhotoItem } from '$lib/features/album/types';
+	import { Play } from 'lucide-svelte';
 
 	let {
 		photos,
@@ -70,18 +71,29 @@
 		return [exif.make, exif.model].filter(Boolean).join(' ') || null;
 	}
 
-	function aspectStyle(exif: PhotoItem['exif']): string {
-		const w = exif?.imageWidth;
-		const h = exif?.imageHeight;
+	function aspectStyle(photo: PhotoItem): string {
+		const w = photo.width || photo.exif?.imageWidth;
+		const h = photo.height || photo.exif?.imageHeight;
 		return w && h ? `aspect-ratio: ${w}/${h};` : '';
 	}
 
 	function photoSrc(photo: PhotoItem): string {
-		return photo.thumbnailUrl || photo.url;
+		return photo.mediaType === 'video' ? photo.posterUrl || '' : photo.thumbnailUrl || photo.url;
+	}
+
+	function durationStr(durationMs?: number | null): string {
+		if (!durationMs || durationMs <= 0) return '';
+		const totalSeconds = Math.round(durationMs / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+		return hours > 0
+			? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+			: `${minutes}:${String(seconds).padStart(2, '0')}`;
 	}
 
 	function capturePhotoTransition(event: MouseEvent, photo: PhotoItem) {
-		if (!browser) return;
+		if (!browser || photo.mediaType === 'video') return;
 
 		const currentTarget = event.currentTarget;
 		if (!(currentTarget instanceof HTMLElement)) return;
@@ -113,7 +125,8 @@
 	}
 
 	function isPhotoLoaded(photo: PhotoItem): boolean {
-		return browser && loadedPhotoSrcSet.has(photoSrc(photo));
+		const src = photoSrc(photo);
+		return !src || (browser && loadedPhotoSrcSet.has(src));
 	}
 
 	// Timeline grouping by month
@@ -143,7 +156,7 @@
 				</h3>
 				<div class="h-px flex-1 bg-ink-200/50 dark:bg-ink-800/50"></div>
 				<span class="text-[10px] text-ink-400/60 dark:text-ink-600/60 sm:text-[11px]"
-					>{group.items.length} 张</span
+					>{group.items.length} 项</span
 				>
 			</div>
 			<div class="columns-2 gap-2.5 space-y-2.5 sm:columns-3 sm:gap-3 sm:space-y-3 lg:columns-4">
@@ -161,7 +174,7 @@
 					>
 						<div
 							class="photo-thumb-frame relative isolate overflow-hidden"
-							style={aspectStyle(photo.exif)}
+							style={aspectStyle(photo)}
 						>
 							<div
 								class="photo-thumb-tint absolute inset-0 z-0"
@@ -172,16 +185,38 @@
 									'#1c1917'} 88%, white 12%) 0%, {photo.exif?.dominantColor || '#1c1917'} 100%);"
 							></div>
 							<div class="photo-thumb-sheen absolute inset-0 z-[1]"></div>
-							<img
-								src={photoSrc(photo)}
-								alt={photo.caption || photo.description || ''}
-								class="photo-thumb-img relative z-10 w-full object-cover"
-								style={aspectStyle(photo.exif)}
-								loading={index < 8 ? 'eager' : 'lazy'}
-								fetchpriority={index < 8 ? 'high' : 'auto'}
-								decoding="async"
-								use:photoLazy
-							/>
+							{#if photoSrc(photo)}
+								<img
+									src={photoSrc(photo)}
+									alt={photo.caption || photo.description || ''}
+									class="photo-thumb-img relative z-10 w-full object-cover"
+									style={aspectStyle(photo)}
+									loading={index < 8 ? 'eager' : 'lazy'}
+									fetchpriority={index < 8 ? 'high' : 'auto'}
+									decoding="async"
+									use:photoLazy
+								/>
+							{:else}
+								<div class="relative z-10 grid aspect-video w-full place-items-center bg-ink-900">
+									<Play size={32} class="text-white/35" />
+								</div>
+							{/if}
+							{#if photo.mediaType === 'video'}
+								<div class="absolute inset-0 z-20 grid place-items-center bg-black/10">
+									<span
+										class="grid h-11 w-11 place-items-center rounded-full bg-black/62 text-white shadow-lg backdrop-blur-sm"
+									>
+										<Play size={18} fill="currentColor" />
+									</span>
+								</div>
+								{#if durationStr(photo.durationMs)}
+									<span
+										class="absolute bottom-2 right-2 z-30 rounded-[3px] bg-black/72 px-1.5 py-0.5 font-mono text-[10px] text-white"
+									>
+										{durationStr(photo.durationMs)}
+									</span>
+								{/if}
+							{/if}
 						</div>
 						{#if photo.caption || deviceStr(photo.exif)}
 							<div

@@ -15,11 +15,19 @@ export type PhotoExif = {
 	[key: string]: unknown;
 };
 
+export type AlbumMediaType = 'image' | 'video';
+
 export type PhotoItem = {
 	id: number;
 	albumId?: number;
 	url: string;
+	mediaType: AlbumMediaType;
+	mimeType?: string | null;
+	posterUrl?: string | null;
 	thumbnailUrl?: string;
+	durationMs?: number | null;
+	width?: number | null;
+	height?: number | null;
 	description?: string | null;
 	caption?: string | null;
 	exif?: PhotoExif | null;

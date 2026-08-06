@@ -244,7 +244,7 @@
 							<span
 								class="rounded-full border border-ink-200/70 bg-ink-50/80 px-2.5 py-1 font-mono text-[10px] tracking-wider text-ink-500 dark:border-ink-800/70 dark:bg-ink-900/70 dark:text-ink-400"
 							>
-								{$album.photoCount} photographs
+								{$album.photoCount} media
 							</span>
 						</div>
 					</div>
@@ -256,7 +256,7 @@
 						<div
 							class="mt-1 font-mono text-[11px] tracking-wider text-ink-400/40 dark:text-ink-600/40"
 						>
-							{$album.photoCount} photographs
+							{$album.photoCount} media
 						</div>
 					</div>
 				</div>
@@ -304,7 +304,7 @@
 		{:else}
 			<div class="py-32 text-center">
 				<p class="font-serif text-lg tracking-wide text-ink-400/50 dark:text-ink-600/50">
-					这本相册还没有照片
+					这本相册还没有媒体
 				</p>
 			</div>
 		{/if}

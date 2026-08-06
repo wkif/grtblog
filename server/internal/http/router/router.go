@@ -75,7 +75,7 @@ func Register(app *fiber.App, deps Dependencies) {
 
 	app.Get("/health/liveness", healthHandler.Liveness)
 	app.Get("/health/readiness", healthHandler.Readiness)
-	app.Static("/uploads", filepath.Join("storage", "uploads"))
+	app.Static("/uploads", filepath.Join("storage", "uploads"), fiber.Static{ByteRange: true})
 
 	api := app.Group("/api")
 	v2 := api.Group("/v2")

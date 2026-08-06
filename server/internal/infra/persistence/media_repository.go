@@ -95,14 +95,18 @@ func (r *UploadFileRepository) UpdateName(ctx context.Context, id int64, name st
 		Update("name", name).Error
 }
 
-func (r *UploadFileRepository) List(ctx context.Context, offset int, limit int) ([]media.UploadFile, int64, error) {
+func (r *UploadFileRepository) List(ctx context.Context, offset int, limit int, fileType string) ([]media.UploadFile, int64, error) {
+	query := r.db.WithContext(ctx).Model(&model.UploadFile{})
+	if fileType != "" {
+		query = query.Where("type = ?", fileType)
+	}
 	var total int64
-	if err := r.db.WithContext(ctx).Model(&model.UploadFile{}).Count(&total).Error; err != nil {
+	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
 	var records []model.UploadFile
-	if err := r.db.WithContext(ctx).
+	if err := query.
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
